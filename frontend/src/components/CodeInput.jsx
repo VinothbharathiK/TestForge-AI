@@ -65,7 +65,7 @@ export default function CodeInput({
   return (
     <section 
       aria-label="FastAPI Route Input" 
-      className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[520px] lg:h-[560px] overflow-hidden transition-all duration-200"
+      className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[520px] h-[520px] lg:h-[min(68vh,640px)] lg:min-h-[550px] overflow-hidden transition-all duration-200"
     >
       {/* Panel Header */}
       <div className="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-white shrink-0">
@@ -173,7 +173,7 @@ export default function CodeInput({
               <div className="flex flex-wrap gap-2 pointer-events-auto">
                 <button
                   type="button"
-                  onClick={() => onSelectPreset('auth_clean')}
+                  onClick={() => onSelectPreset('auth-clean')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-slate-200 hover:border-purple-200 shadow-xs transition-colors cursor-pointer"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
@@ -181,7 +181,7 @@ export default function CodeInput({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSelectPreset('checkout_defect')}
+                  onClick={() => onSelectPreset('checkout-defect')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 shadow-xs transition-colors cursor-pointer"
                 >
                   <Bug className="w-3.5 h-3.5 text-rose-500" />

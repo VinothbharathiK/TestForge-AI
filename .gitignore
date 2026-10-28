@@ -1,0 +1,14 @@
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python virtual environments, caches, and test artifacts
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/

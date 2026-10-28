@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Bot,
   Terminal,
@@ -19,9 +19,10 @@ import CodeInput from './components/CodeInput';
 import AgentLogs from './components/AgentLogs';
 import TestViewer from './components/TestViewer';
 import { generateAndTestApi, SAMPLE_PRESETS } from './services/api';
+import { isConfirmedDefect, isVerifiedPass } from './utils/resultPresentation';
 
 export default function App() {
-  // Core states: 'idle' | 'loading' | 'success' | 'defect_detected'
+  // Core states: idle, loading, success, defect_detected, failed, or error.
   const [status, setStatus] = useState('idle');
   const [activeTab, setActiveTab] = useState('logs'); // 'logs' | 'suite'
   const [code, setCode] = useState(SAMPLE_PRESETS[0].code);
@@ -33,26 +34,49 @@ export default function App() {
   const [defectDetails, setDefectDetails] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [diagnosis, setDiagnosis] = useState(null);
+  const [failureType, setFailureType] = useState(null);
+  const runSequence = useRef(0);
+
+  const clearRunResult = () => {
+    setLogs([]);
+    setGeneratedTestCode('');
+    setDefectDetails(null);
+    setMetrics(null);
+    setErrorMessage(null);
+    setDiagnosis(null);
+    setFailureType(null);
+  };
 
   // Switch preset
   const handleSelectPreset = (presetId) => {
     const preset = SAMPLE_PRESETS.find((p) => p.id === presetId);
     if (preset) {
+      runSequence.current += 1;
       setCode(preset.code);
       setActivePresetId(preset.id);
       setStatus('idle');
-      setErrorMessage(null);
-      setDefectDetails(null);
+      clearRunResult();
     }
+  };
+
+  const handleCodeChange = (nextCode) => {
+    runSequence.current += 1;
+    setCode(nextCode);
+    const matchingPreset = SAMPLE_PRESETS.find((preset) => preset.code === nextCode);
+    setActivePresetId(matchingPreset?.id || null);
+    setStatus('idle');
+    clearRunResult();
   };
 
   // Main generation & execution orchestrator
   const handleGenerateAndTest = async () => {
     if (!code || code.trim().length === 0) return;
+    const runId = ++runSequence.current;
+    const sourceCode = code;
 
+    clearRunResult();
     setStatus('loading');
-    setErrorMessage(null);
-    setDefectDetails(null);
     setActiveTab('logs'); // Switch to terminal logs to watch execution
     setLogs([
       `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] [INFO] Initializing TestForge Autonomous Agent...`,
@@ -61,7 +85,8 @@ export default function App() {
 
     try {
       // Call the REAL Axios POST request via the API service
-      const result = await generateAndTestApi(code);
+      const result = await generateAndTestApi(sourceCode);
+      if (runId !== runSequence.current) return;
 
       // Stream the logs into terminal in timed stages for visual feedback
       const allLogs = result.logs || [];
@@ -69,21 +94,46 @@ export default function App() {
 
       for (let i = 2; i < allLogs.length; i++) {
         await new Promise((resolve) => setTimeout(resolve, intermediateDelay));
+        if (runId !== runSequence.current) return;
         setLogs((prev) => [...prev, allLogs[i]]);
       }
 
-      setGeneratedTestCode(result.code);
-      setMetrics(result.metrics);
+      if (runId !== runSequence.current) return;
+      setGeneratedTestCode(result.code || '');
+      setMetrics(result.metrics || null);
+      setDiagnosis(result.diagnosis || null);
+      setFailureType(result.failure_type || null);
 
-      if (result.defect_detected) {
+      if (isVerifiedPass(result)) {
+        setStatus('success');
+      } else if (isConfirmedDefect(result)) {
         setStatus('defect_detected');
         setDefectDetails(result.defectDetails);
+      } else if (result.status === 'defect_detected' || result.defect_detected === true) {
+        const message = 'The backend reported a defect without evidence of an executed failing assertion. The result is shown as inconclusive.';
+        setStatus('failed');
+        setFailureType('unverified_defect');
+        setDiagnosis({ category: 'unverified_defect', title: 'Test Run Inconclusive', message });
+        setErrorMessage(message);
+      } else if (result.status === 'success') {
+        const message = 'The backend marked this run successful without a confirmed pytest exit code 0 and at least one passing collected test.';
+        setStatus('failed');
+        setFailureType('unverified_result');
+        setDiagnosis({ category: 'unverified_result', title: 'Run Not Verified', message });
+        setErrorMessage(message);
       } else {
-        setStatus('success');
+        setStatus(result.status === 'error' ? 'error' : 'failed');
+        setErrorMessage(
+          result.diagnosis?.message || result.logs?.[result.logs.length - 1] ||
+          (result.status === 'error'
+            ? 'The backend could not complete generation or sandbox execution.'
+            : 'The generated tests did not pass after the available repair attempts.')
+        );
       }
     } catch (err) {
+      if (runId !== runSequence.current) return;
       console.error('TestForge execution error:', err);
-      setStatus('defect_detected');
+      setStatus('error');
       setErrorMessage(err.message || 'An error occurred during test synthesis.');
       setLogs((prev) => [
         ...prev,
@@ -94,12 +144,9 @@ export default function App() {
 
   // Reset to initial state
   const handleReset = () => {
+    runSequence.current += 1;
     setStatus('idle');
-    setLogs([]);
-    setGeneratedTestCode('');
-    setDefectDetails(null);
-    setMetrics(null);
-    setErrorMessage(null);
+    clearRunResult();
     setActiveTab('logs');
   };
 
@@ -107,7 +154,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-purple-100 selection:text-purple-900">
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-[96%] max-w-[1600px] mx-auto px-1 sm:px-2 h-16 flex items-center justify-between">
           {/* Left: Brand & Badges */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-sm shadow-purple-200">
@@ -133,9 +180,9 @@ export default function App() {
               <span className="px-2 text-slate-500 font-medium">Quick Demo:</span>
               <button
                 type="button"
-                onClick={() => handleSelectPreset('auth_clean')}
+                onClick={() => handleSelectPreset('auth-clean')}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  activePresetId === 'auth_clean'
+                  activePresetId === 'auth-clean'
                     ? 'bg-white text-purple-700 shadow-xs border border-slate-200/80'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                 }`}
@@ -144,9 +191,9 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => handleSelectPreset('checkout_defect')}
+                onClick={() => handleSelectPreset('checkout-defect')}
                 className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  activePresetId === 'checkout_defect'
+                  activePresetId === 'checkout-defect'
                     ? 'bg-white text-rose-700 shadow-xs border border-slate-200/80'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                 }`}
@@ -173,13 +220,19 @@ export default function App() {
               {status === 'success' && (
                 <span className="text-emerald-600 flex items-center gap-1.5 font-semibold">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Passed (100%)
+                  Passed
                 </span>
               )}
               {status === 'defect_detected' && (
                 <span className="text-rose-600 flex items-center gap-1.5 font-semibold">
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                   Defect Flagged
+                </span>
+              )}
+              {(status === 'error' || status === 'failed') && (
+                <span className="text-amber-700 flex items-center gap-1.5 font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  Run Incomplete
                 </span>
               )}
             </div>
@@ -198,7 +251,7 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col gap-5">
+      <main className="flex-1 w-[96%] max-w-[1600px] mx-auto px-1 sm:px-2 py-4 sm:py-5 flex flex-col gap-4">
         {/* Core State Notification Banners */}
         {status === 'idle' && (
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-4">
@@ -254,11 +307,11 @@ export default function App() {
                     Autonomous Test Suite Generated &amp; Verified
                   </h3>
                   <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                    100% Passed
+                    {metrics?.testsPassed ?? 0} Passed
                   </span>
                 </div>
                 <p className="text-xs text-emerald-800/90 mt-0.5">
-                  All assertions satisfied in sandboxed pytest container. Automatic fixture repair reconciled client lifespan and boundary mutations.
+                  Pytest exited with code {metrics?.pytestExitCode ?? 'unknown'} after {metrics?.testsPassed ?? 0} passing test{metrics?.testsPassed === 1 ? '' : 's'}.
                 </p>
               </div>
             </div>
@@ -286,14 +339,14 @@ export default function App() {
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-sm font-bold text-rose-950">
-                      Defect Detected: Unhandled Source Bug in FastAPI Route!
+                      Defect Detected: API behavior did not satisfy a valid test assertion.
                     </h3>
                     <span className="text-[11px] font-semibold bg-rose-200/80 text-rose-900 px-2 py-0.5 rounded-full border border-rose-300">
-                      CRITICAL 500 BUG
+                      ASSERTION FAILURE
                     </span>
                   </div>
                   <p className="text-xs text-rose-900/90 mt-1 leading-relaxed">
-                    {defectDetails?.message || errorMessage || 'The autonomous fuzzer discovered an edge condition that crashes the endpoint with an unhandled 500 error.'}
+                    {defectDetails?.message || errorMessage || 'The executed test assertions failed. Review the summary and raw pytest output before drawing conclusions.'}
                   </p>
                 </div>
               </div>
@@ -332,13 +385,24 @@ export default function App() {
           </div>
         )}
 
+        {(status === 'error' || status === 'failed') && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-xs">
+            <h3 className="text-sm font-semibold text-amber-950">
+              {diagnosis?.title || (status === 'error' ? 'Generation or execution error' : 'Tests did not pass')}
+            </h3>
+            <p className="text-xs text-amber-900 mt-1 whitespace-pre-wrap">
+              {errorMessage || 'The backend did not verify a passing test run.'}
+            </p>
+          </div>
+        )}
+
         {/* Main Content Split Screen (Grid 12 cols: 6 Left, 6 Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 items-stretch flex-1 min-h-0">
           {/* Left Panel: Raw FastAPI Route Code Input */}
-          <div className="lg:col-span-6 flex flex-col">
+          <div className="min-w-0 flex flex-col">
             <CodeInput
               code={code}
-              onChange={setCode}
+              onChange={handleCodeChange}
               onGenerate={handleGenerateAndTest}
               status={status}
               onSelectPreset={handleSelectPreset}
@@ -347,10 +411,10 @@ export default function App() {
           </div>
 
           {/* Right Panel: Output with Tabbed Interface */}
-          <div className="lg:col-span-6 flex flex-col">
+          <div className="min-w-0 flex flex-col">
             <section 
               aria-label="Agent Output and Test Suite" 
-              className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[520px] lg:h-[560px] overflow-hidden"
+              className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[520px] h-[520px] lg:h-[min(68vh,640px)] lg:min-h-[550px] overflow-hidden"
             >
               {/* Tabbed Navigation Bar */}
               <div className="px-5 border-b border-slate-200 flex items-center justify-between bg-white">
@@ -415,6 +479,8 @@ export default function App() {
                     logs={logs}
                     status={status}
                     metrics={metrics}
+                    diagnosis={diagnosis}
+                    failureType={failureType}
                     defectDetails={defectDetails}
                     onReset={handleReset}
                   />
@@ -434,7 +500,7 @@ export default function App() {
 
       {/* Enterprise SaaS Footer */}
       <footer className="mt-auto bg-white border-t border-slate-200 py-3.5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+        <div className="w-[96%] max-w-[1600px] mx-auto px-1 sm:px-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-800">TestForge AI</span>
             <span>&mdash; Autonomous API test-generation &amp; repair engine</span>

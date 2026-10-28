@@ -4,3 +4,4 @@ openai
 docker
 pydantic
 pytest
+python-dotenv

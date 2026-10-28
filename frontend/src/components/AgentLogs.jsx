@@ -1,95 +1,76 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Terminal,
-  Copy,
-  Check,
-  RotateCcw,
-  AlertTriangle,
-  CheckCircle2,
-  Cpu,
-  Clock,
-  Sparkles,
-  ArrowDown
-} from 'lucide-react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { AlertTriangle, Check, CheckCircle2, Clock, Copy, Cpu, Terminal } from 'lucide-react';
+import { splitLogEntries, summarizeResult } from '../utils/resultPresentation';
 
-/**
- * Terminal-like execution window for TestForge Autonomous QA Agent.
- * High-contrast dark styling (bg-slate-900) even in light mode.
- */
+function parseLog(entry) {
+  const text = entry.message;
+  const timeMatch = text.match(/^\[(\d{2}:\d{2}:\d{2})\]\s*/);
+  const tagMatch = text.match(/\[(INFO|AGENT|MODEL|EXEC|SUCCESS|TEST|HEAL|DEFECT|WARN|ERROR)\]/i);
+  const rawCategory = tagMatch?.[1]?.toUpperCase() || 'INFO';
+  const category = ({ AGENT: 'INFO', SUCCESS: 'TEST', WARN: 'TEST', HEAL: 'REPAIR' })[rawCategory] || rawCategory;
+  return {
+    timestamp: timeMatch?.[1] || entry.timestamp,
+    category,
+    message: text.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, ''),
+  };
+}
+
+const categoryColors = {
+  INFO: 'text-slate-300',
+  MODEL: 'text-purple-300',
+  EXEC: 'text-sky-300',
+  TEST: 'text-emerald-300',
+  REPAIR: 'text-amber-300',
+  DEFECT: 'text-rose-300',
+  ERROR: 'text-rose-300',
+};
+
 export default function AgentLogs({
   logs = [],
   status,
   metrics,
-  defectDetails,
-  onReset
+  diagnosis,
+  failureType,
 }) {
   const [copied, setCopied] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const logContainerRef = useRef(null);
+  const { visible, raw } = useMemo(() => splitLogEntries(logs), [logs]);
+  const summary = useMemo(
+    () => summarizeResult({ status, metrics, diagnosis, failureType, logs }),
+    [status, metrics, diagnosis, failureType, logs],
+  );
 
-  const isLoading = status === 'loading';
-  const isDefect = status === 'defect_detected';
-  const isSuccess = status === 'success';
-  const isIdle = status === 'idle';
-
-  // Auto-scroll to bottom as logs update
   useEffect(() => {
     if (autoScroll && logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
-  }, [logs, isLoading, autoScroll]);
+  }, [visible, status, autoScroll]);
 
   const handleCopyLogs = async () => {
     try {
-      const fullLogText = logs.join('\n');
-      await navigator.clipboard.writeText(fullLogText);
+      await navigator.clipboard.writeText(logs.map((entry) => (
+        typeof entry === 'string' ? entry : entry?.message || JSON.stringify(entry)
+      )).join('\n'));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy logs', e);
+    } catch (error) {
+      console.error('Failed to copy logs', error);
     }
   };
 
-  // Helper to colorize log prefixes
-  const renderLogLine = (line, idx) => {
-    let colorClass = 'text-slate-300';
-    let badgeClass = 'text-slate-400';
-
-    if (line.includes('[SUCCESS]')) {
-      colorClass = 'text-emerald-400 font-medium';
-      badgeClass = 'text-emerald-300 font-bold';
-    } else if (line.includes('[DEFECT]') || line.includes('[WARN]')) {
-      colorClass = 'text-rose-400 font-medium';
-      badgeClass = 'text-rose-300 font-bold';
-    } else if (line.includes('[HEAL]')) {
-      colorClass = 'text-amber-300 font-medium';
-      badgeClass = 'text-amber-400 font-bold';
-    } else if (line.includes('[AGENT]') || line.includes('[SYNTH]')) {
-      colorClass = 'text-purple-300';
-      badgeClass = 'text-purple-400 font-bold';
-    } else if (line.includes('[EXEC]')) {
-      colorClass = 'text-sky-300';
-      badgeClass = 'text-sky-400';
-    } else if (line.includes('[INFO]')) {
-      colorClass = 'text-slate-400';
-      badgeClass = 'text-cyan-400';
-    }
-
-    return (
-      <div key={idx} className={`leading-6 flex items-start gap-2 font-mono text-xs sm:text-[13px] ${colorClass}`}>
-        <span className="select-none text-slate-600 text-[11px] w-6 text-right shrink-0">
-          {idx + 1}
-        </span>
-        <span className="break-all whitespace-pre-wrap">{line}</span>
-      </div>
-    );
-  };
+  const active = status !== 'idle';
+  const summaryTone = status === 'success'
+    ? 'border-emerald-800 bg-emerald-950/60 text-emerald-100'
+    : status === 'defect_detected'
+      ? 'border-rose-800 bg-rose-950/60 text-rose-100'
+      : status === 'error' || failureType
+        ? 'border-amber-800 bg-amber-950/50 text-amber-100'
+        : 'border-slate-700 bg-slate-800/70 text-slate-100';
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 rounded-b-xl overflow-hidden text-slate-200">
-      {/* Terminal Titlebar Chrome */}
-      <div className="px-4 py-3 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs select-none">
-        {/* Left: macOS-style window dots & Shell status */}
+    <div className="flex flex-col h-full min-h-0 bg-slate-900 rounded-b-xl overflow-hidden text-slate-200">
+      <div className="px-4 py-3 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5" aria-hidden="true">
             <span className="w-3 h-3 rounded-full bg-rose-500/80 inline-block border border-rose-600/50" />
@@ -101,122 +82,108 @@ export default function AgentLogs({
             testforge-agent: pytest-sandbox
           </span>
         </div>
-
-        {/* Right: State badge & Terminal actions */}
-        <div className="flex items-center gap-2">
-          {isLoading && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-purple-900/60 text-purple-300 border border-purple-700/50 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              HEALING_LOOP
-            </span>
-          )}
-
-          {isSuccess && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              SANDBOX_PASS
-            </span>
-          )}
-
-          {isDefect && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-rose-900/60 text-rose-300 border border-rose-700/50">
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-              DEFECT_HALTED
-            </span>
-          )}
-
-          {logs.length > 0 && (
-            <button
-              type="button"
-              onClick={handleCopyLogs}
-              title="Copy terminal logs"
-              aria-label="Copy terminal logs"
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono transition-colors cursor-pointer border border-slate-700"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3 h-3 text-emerald-400" />
-                  <span>Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3 text-slate-400" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
+        {logs.length > 0 && (
+          <button
+            type="button"
+            onClick={handleCopyLogs}
+            title="Copy all execution logs"
+            aria-label="Copy all execution logs"
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono border border-slate-700"
+          >
+            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            {copied ? 'Copied' : 'Copy Logs'}
+          </button>
+        )}
       </div>
 
-      {/* Terminal Log Output Stream */}
-      <div 
+      {active && (
+        <section aria-label="Execution summary" className={`mx-3 mt-3 rounded-lg border p-3 shrink-0 ${summaryTone}`}>
+          <div className="flex items-start gap-2.5">
+            {status === 'success'
+              ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
+              : status === 'defect_detected'
+                ? <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-rose-300" />
+                : <Clock className="w-4 h-4 mt-0.5 shrink-0 text-amber-300" />}
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm">{summary.title}</h3>
+              {summary.exceptionHeadline && (
+                <p className="mt-1 font-mono text-xs font-semibold text-amber-200 break-words">
+                  {summary.exceptionHeadline}
+                </p>
+              )}
+              <p className="text-xs mt-1 leading-relaxed whitespace-pre-wrap break-words">{summary.message}</p>
+              {summary.details.length > 0 && (
+                <p className="mt-2 text-[10px] leading-relaxed font-mono text-slate-300 break-words">
+                  {summary.details.join('  ·  ')}
+                </p>
+              )}
+              {diagnosis?.likely_cause && (
+                <p className="mt-2 text-xs text-amber-100"><strong>Likely cause:</strong> {diagnosis.likely_cause}</p>
+              )}
+              {diagnosis?.suggestion && (
+                <div className="mt-2">
+                  <p className="text-xs font-semibold mb-1">Suggested fix (not applied):</p>
+                  <pre className="max-h-28 overflow-auto rounded bg-slate-950/80 border border-slate-700 p-2 text-[11px] leading-5 font-mono whitespace-pre-wrap break-words">{diagnosis.suggestion}</pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div
         ref={logContainerRef}
         role="log"
         aria-live="polite"
-        className="flex-1 min-h-0 p-4 overflow-y-auto space-y-1 font-mono scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
+        className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto space-y-2 font-mono scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        {isIdle && logs.length === 0 && (
-          <div className="h-full min-h-[300px] flex flex-col items-center justify-center text-center text-slate-500 py-12">
+        {status === 'idle' && logs.length === 0 && (
+          <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center text-slate-500 py-8">
             <Cpu className="w-10 h-10 text-slate-700 mb-3" />
-            <p className="font-mono text-sm text-slate-400 mb-1">
-              TestForge Autonomous Agent: Standing By
-            </p>
-            <p className="text-xs text-slate-600 max-w-sm mb-4">
-              Click &quot;Generate &amp; Test&quot; to compile your FastAPI routes, synthesize property tests, and run isolated pytest sandbox verification.
-            </p>
-            <div className="text-[11px] font-mono text-slate-600 bg-slate-950/60 px-3 py-1.5 rounded border border-slate-800">
-              $ testforge --watch --auto-heal --fuzz
-            </div>
+            <p className="font-mono text-sm text-slate-400 mb-1">TestForge Autonomous Agent: Standing By</p>
+            <p className="text-xs text-slate-600 max-w-sm">Generate tests to see model activity, pytest results, and any repair steps.</p>
           </div>
         )}
 
-        {/* Render all log entries */}
-        {logs.map((line, idx) => renderLogLine(line, idx))}
+        {visible.map((entry) => {
+          const parsed = parseLog(entry);
+          return (
+            <div key={entry.id} className="grid grid-cols-[62px_48px_minmax(0,1fr)] gap-2 items-start text-[11px] sm:text-xs leading-5">
+              <time className="text-slate-500 text-[10px] pt-0.5">{parsed.timestamp}</time>
+              <span className={`font-bold text-[10px] pt-0.5 ${categoryColors[parsed.category] || 'text-slate-400'}`}>{parsed.category}</span>
+              <span className={`min-w-0 whitespace-pre-wrap break-words ${categoryColors[parsed.category] || 'text-slate-300'}`}>{parsed.message}</span>
+            </div>
+          );
+        })}
 
-        {/* Pulsing loading state in the terminal log */}
-        {isLoading && (
-          <div className="pt-2 pb-3 space-y-2 border-t border-slate-800/80 mt-2">
-            <div className="flex items-center gap-2 text-purple-400 text-xs font-mono animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
-              <span>Agent active: Drafting test suite and executing isolated pytest sandbox...</span>
-            </div>
-            <div className="text-amber-400/90 text-xs font-mono pl-4 animate-pulse">
-              &gt; Evaluating boundary conditions &amp; self-healing fixture dependencies...
-            </div>
-          </div>
+        {raw.length > 0 && (
+          <details className="mt-3 rounded-lg border border-slate-700 bg-slate-950/60">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-sans font-medium text-slate-300 hover:text-white">
+              View raw output / traceback ({raw.length} entries)
+            </summary>
+            <pre className="max-h-72 overflow-auto border-t border-slate-800 p-3 text-[11px] leading-5 text-slate-300 font-mono whitespace-pre-wrap break-words">{raw.map((entry) => entry.message).join('\n\n')}</pre>
+          </details>
         )}
 
-        {/* Terminal bottom prompt cursor */}
-        <div className="flex items-center gap-2 text-slate-500 text-xs pt-2">
-          <span className="text-purple-400 font-bold">$</span>
-          <span className="inline-block w-2 h-4 bg-green-400 animate-pulse" />
-        </div>
+        {status === 'loading' && (
+          <div className="pt-2 flex items-center gap-2 text-purple-300 text-xs animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />
+            Agent is generating tests and running isolated pytest verification…
+          </div>
+        )}
       </div>
 
-      {/* Terminal Footer Bar with Metrics */}
-      <div className="px-4 py-2.5 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 font-mono">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-slate-500" />
-            Sandbox: {metrics?.executionTimeMs ? `${metrics.executionTimeMs}ms` : '--'}
-          </span>
-          <span className="text-slate-700">|</span>
-          <span>
-            Assertions: {metrics?.totalAssertions ? `${metrics.totalAssertions} passed` : '--'}
-          </span>
-          <span className="text-slate-700">|</span>
-          <span>
-            Coverage: {metrics?.coveragePct ? `${metrics.coveragePct}%` : '--'}
-          </span>
+      <div className="px-4 py-2.5 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 font-mono shrink-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-500" />Sandbox: {metrics?.executionTimeMs != null ? `${metrics.executionTimeMs}ms` : '--'}</span>
+          <span>Tests: {metrics?.testsCollected != null ? `${metrics.testsPassed || 0}/${metrics.testsCollected} passed` : '--'}</span>
+          {metrics?.pytestExitCode != null && <span>Exit: {metrics.pytestExitCode}</span>}
         </div>
-
         <button
           type="button"
-          onClick={() => setAutoScroll(!autoScroll)}
-          className={`text-[11px] px-2 py-0.5 rounded transition-colors cursor-pointer ${
-            autoScroll ? 'text-purple-300 bg-purple-950/60' : 'text-slate-500 hover:text-slate-300'
-          }`}
+          onClick={() => setAutoScroll((current) => !current)}
+          aria-pressed={autoScroll}
+          className={`text-[11px] px-2 py-0.5 rounded ${autoScroll ? 'text-purple-300 bg-purple-950/60' : 'text-slate-500 hover:text-slate-300'}`}
         >
           Auto-scroll: {autoScroll ? 'ON' : 'OFF'}
         </button>
