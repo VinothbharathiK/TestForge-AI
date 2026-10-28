@@ -1,0 +1,7 @@
+{
+  "name": "TestForge AI",
+  "description": "Autonomous API test-generation and self-healing QA system for modern FastAPI routes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
