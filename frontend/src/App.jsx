@@ -27,6 +27,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('logs'); // 'logs' | 'suite'
   const [code, setCode] = useState(SAMPLE_PRESETS[0].code);
   const [activePresetId, setActivePresetId] = useState(SAMPLE_PRESETS[0].id);
+  const [mode, setMode] = useState('standard'); // 'standard' | 'adversarial'
 
   // Agent output data
   const [logs, setLogs] = useState([]);
@@ -84,8 +85,8 @@ export default function App() {
     ]);
 
     try {
-      // Call the REAL Axios POST request via the API service
-      const result = await generateAndTestApi(sourceCode);
+      // Call the REAL Axios POST request via the API service with selected mode
+      const result = await generateAndTestApi(sourceCode, mode);
       if (runId !== runSequence.current) return;
 
       // Stream the logs into terminal in timed stages for visual feedback
@@ -407,6 +408,8 @@ export default function App() {
               status={status}
               onSelectPreset={handleSelectPreset}
               activePresetId={activePresetId}
+              mode={mode}
+              onModeChange={setMode}
             />
           </div>
 

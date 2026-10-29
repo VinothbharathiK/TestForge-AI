@@ -435,3 +435,54 @@ def test_repair_attempts_are_limited_to_three():
 
     assert result["status"] == "failed"
     assert client.chat.completions.create.await_count == 4  # initial + 3 repairs
+
+
+def test_standard_mode_is_default_and_uses_standard_prompt():
+    client = fake_client(model_response(VALID_TEST))
+    sandbox = FakeSandbox([(True, sandbox_output(meta(exit_code=0, collected=1, passed=1)))])
+    agent = TestForgeAgent(client=client, sandbox=sandbox, environ={})
+
+    result = asyncio.run(agent.generate_and_heal("from fastapi import FastAPI"))
+
+    assert result["status"] == "success"
+    assert result["mode"] == "standard"
+    assert result["metrics"]["mode"] == "standard"
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    messages = call_kwargs["messages"]
+    dev_msg = next(m["content"] for m in messages if m["role"] == "developer")
+    assert "senior QA engineer generating tests" in dev_msg
+    assert "adversarial edge-case" not in dev_msg
+
+
+def test_adversarial_mode_uses_adversarial_prompt_with_boundary_instructions():
+    client = fake_client(model_response(VALID_TEST))
+    sandbox = FakeSandbox([(True, sandbox_output(meta(exit_code=0, collected=1, passed=1)))])
+    agent = TestForgeAgent(client=client, sandbox=sandbox, environ={})
+
+    result = asyncio.run(agent.generate_and_heal("from fastapi import FastAPI", mode="adversarial"))
+
+    assert result["status"] == "success"
+    assert result["mode"] == "adversarial"
+    assert result["metrics"]["mode"] == "adversarial"
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    messages = call_kwargs["messages"]
+    dev_msg = next(m["content"] for m in messages if m["role"] == "developer")
+    assert "adversarial edge-case testing" in dev_msg
+    assert "Minimum, maximum, zero, negative" in dev_msg
+    assert "Unicode, whitespace" in dev_msg
+    user_msg = next(m["content"] for m in messages if m["role"] == "user")
+    assert "adversarial edge-case" in user_msg
+
+
+def test_unsupported_mode_in_agent_returns_error_result():
+    client = fake_client()
+    agent = TestForgeAgent(client=client, sandbox=FakeSandbox([]), environ={})
+
+    result = asyncio.run(agent.generate_and_heal("from fastapi import FastAPI", mode="unsupported_mode"))
+
+    assert result["status"] == "error"
+    assert result["defect_detected"] is False
+    assert result["failure_type"] == "invalid_mode"
+    assert result["diagnosis"]["title"] == "Unsupported Testing Mode"
+    assert "Supported modes are: 'standard', 'adversarial'" in result["diagnosis"]["message"]
+    assert client.chat.completions.create.await_count == 0

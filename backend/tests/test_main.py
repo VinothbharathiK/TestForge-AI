@@ -34,8 +34,8 @@ class FakeAgent:
     def __init__(self):
         self.closed = False
 
-    async def generate_and_heal(self, code):
-        return {**self.result, "received_code": code}
+    async def generate_and_heal(self, code, mode="standard"):
+        return {**self.result, "received_code": code, "received_mode": mode}
 
     async def aclose(self):
         self.closed = True
@@ -57,6 +57,33 @@ def test_endpoint_calls_agent_and_returns_actual_success_result(monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     assert response.json()["received_code"] == "app = FastAPI()"
+    assert response.json()["received_mode"] == "standard"
+
+
+def test_endpoint_forwards_adversarial_mode(monkeypatch):
+    FakeAgent.result = {
+        "status": "success",
+        "defect_detected": False,
+        "logs": ["pytest: 1 passed"],
+        "code": "def test_adversarial(): pass",
+    }
+    monkeypatch.setattr(main, "TestForgeAgent", FakeAgent)
+
+    response = TestClient(main.app).post(
+        "/generate-tests", json={"code": "app = FastAPI()", "mode": "adversarial"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["received_mode"] == "adversarial"
+
+
+def test_endpoint_rejects_unsupported_mode():
+    response = TestClient(main.app).post(
+        "/generate-tests", json={"code": "app = FastAPI()", "mode": "unsupported_fuzz"}
+    )
+
+    assert response.status_code == 422
 
 
 def test_endpoint_returns_service_error_status_for_configuration_failure(monkeypatch):

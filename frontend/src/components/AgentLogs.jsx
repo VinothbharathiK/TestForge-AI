@@ -178,6 +178,11 @@ export default function AgentLogs({
           <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-slate-500" />Sandbox: {metrics?.executionTimeMs != null ? `${metrics.executionTimeMs}ms` : '--'}</span>
           <span>Tests: {metrics?.testsCollected != null ? `${metrics.testsPassed || 0}/${metrics.testsCollected} passed` : '--'}</span>
           {metrics?.pytestExitCode != null && <span>Exit: {metrics.pytestExitCode}</span>}
+          {metrics?.mode && (
+            <span className={metrics.mode === 'adversarial' ? 'text-rose-400 font-semibold' : ''}>
+              Mode: {metrics.mode}
+            </span>
+          )}
         </div>
         <button
           type="button"

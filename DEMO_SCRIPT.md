@@ -10,10 +10,10 @@ Every metric, log format, and architectural detail in this document reflects the
 
 ### System Status & Baseline Checks
 All deterministic local checks pass without requiring network or credentials:
-* **Backend Unit Suite**: 64 passed (`pytest backend/tests -q`)
+* **Backend Unit Suite**: 73 passed (`pytest backend/tests -q`)
 * **Frontend Test Suite**: 10 passed (`npm test` in `frontend/`)
 * **Production Build**: Succeeded (`npm run build` in `frontend/`)
-* **Evaluation Benchmark**: 7/7 scenarios matched their expected outcomes (`backend/eval_reports/PHASE5_LIVE_SUMMARY.md`)
+* **Evaluation Benchmark**: 8/8 scenarios matched their expected outcomes (`backend/eval_reports/PHASE5_LIVE_SUMMARY.md`)
 
 ### Starting Local Services (Windows PowerShell from Repository Root)
 
@@ -38,8 +38,9 @@ All deterministic local checks pass without requiring network or credentials:
 ```
   0:00 ─── Clean Route Generation (auth-clean)
   1:00 ─── Defect Detection & Isolation (checkout-defect)
-  2:15 ─── Application Initialization Failure (contract integrity)
-  3:15 ─── Autonomous Self-Healing & Assertion Preservation
+  2:00 ─── Adversarial Edge-Case Testing (boundary & payload probing)
+  2:45 ─── Application Initialization Failure (contract integrity)
+  3:30 ─── Autonomous Self-Healing & Assertion Preservation
   4:15 ─── Benchmark Evaluation & Architecture Summary
 ```
 
@@ -86,7 +87,23 @@ All deterministic local checks pass without requiring network or credentials:
 
 ---
 
-### Step 3: Application Initialization Errors vs. API Defects (2:15 – 3:15)
+### Step 2b: Adversarial Edge-Case Testing Mode (2:00 – 2:45)
+
+* **Objective**: Demonstrate the adversarial testing mode that instructs Meta Muse Spark to actively probe unhandled corner cases and malicious or boundary inputs.
+* **UI Action**:
+  1. In the workbench header, point out the **Testing Mode** toggle: `Standard Tests` vs `Adversarial Edge Cases`.
+  2. Switch the toggle to **"Adversarial Edge Cases"** (notice the amber shield badge).
+  3. Click **"Generate & Test"**.
+* **What the Audience Observes**:
+  * Agent logs record: `[CONFIG] Testing mode: adversarial`.
+  * The prompt instructs Meta Muse Spark to generate boundary-probing tests: negative quantities, zero values, extreme bounds, blank/whitespace-only strings, type coercion edges, and unhandled status codes.
+  * Show how the resulting suite thoroughly exercises application validation boundaries without weakening standard contract coverage.
+* **Presenter Talking Points**:
+  > *"Developers often test the happy path. TestForge's Adversarial Edge-Case mode shifts LLM test generation into an attacker's perspective, actively searching for missing validators, unhandled zero/negative values, and edge-condition crashes."*
+
+---
+
+### Step 3: Application Initialization Errors vs. API Defects (2:45 – 3:30)
 
 * **Objective**: Demonstrate classification precision. When code cannot even start, the engine does not falsely report an "API Defect" or attempt test repairs.
 * **UI Action**:
@@ -130,11 +147,11 @@ All deterministic local checks pass without requiring network or credentials:
 * **Objective**: Show the reproducible evaluation benchmark and summarize the project.
 * **UI / CLI Action**:
   * Point to the repository file: [`backend/eval_reports/PHASE5_LIVE_SUMMARY.md`](file:///backend/eval_reports/PHASE5_LIVE_SUMMARY.md).
-  * Show how any reviewer can reproduce the full 7-scenario evaluation benchmark using:
+  * Show how any reviewer can reproduce the full 8-scenario evaluation benchmark using:
     ```powershell
     .\backend\venv\Scripts\python.exe -m backend.eval_phase5 all --live
     ```
-* **Previously Verified Benchmark Results (2026-10-29)**:
+* **Previously Verified Benchmark Results (2026-10-29 & 2026-10-30)**:
 
 | Scenario | Category | Expected Outcome | Actual Recorded Outcome | Status |
 | :--- | :--- | :--- | :--- | :--- |
@@ -145,11 +162,12 @@ All deterministic local checks pass without requiring network or credentials:
 | `broken-init` | App init error | App initialization error | Exit 2, 0 endpoint tests, 0 repairs | Matched |
 | `pagination-boundary-defect` | Defect | API defect detected | 6 passed, 7 failed, exit 1 | Matched |
 | `input-validation-defect` | Defect | API defect detected | 4 passed, 3 failed, exit 1 | Matched |
+| `adversarial-boundary-defect` | Defect | API defect detected | 46 passed, 11 failed, exit 1 | Matched |
 
 *Note: The results above record previously verified live benchmark runs. While new runs with dynamic LLMs will produce slightly varying test counts, the classification verdicts and contract boundaries remain reproducible.*
 
 * **Presenter Concluding Statement**:
-  > *"Across 7 live benchmark scenarios, TestForge achieved a 7/7 outcome match rate, 100% defect classification accuracy across executed endpoint suites, 0 false positives, and 100% assertion preservation across repairs. It provides a complete, evidence-based autonomous QA workflow."*
+  > *"Across 8 live benchmark scenarios, TestForge achieved an 8/8 outcome match rate, 100% defect classification accuracy across executed endpoint suites (6/6), 0 false positives, and 100% assertion preservation across repairs. It provides a complete, evidence-based autonomous QA workflow."*
 
 ---
 
@@ -239,21 +257,21 @@ In automated testing, **why** a test failed is as important as the failure itsel
 
 ### 4. Benchmark Denominators & Statistical Honesty
 
-#### *Why does the benchmark distinguish between 7/7 overall matches and 5/5 classification accuracy?*
+#### *Why does the benchmark distinguish between 8/8 overall matches and 6/6 classification accuracy?*
 
 In software evaluation, **denominators matter**. Inflating metrics creates false confidence. TestForge reports distinct, statistically honest metrics:
 
-* **Overall Expected-Outcome Match (7/7, 100%)**:
-  * *Denominator*: All 7 benchmark scenarios.
+* **Overall Expected-Outcome Match (8/8, 100%)**:
+  * *Denominator*: All 8 benchmark scenarios.
   * *Meaning*: Every scenario behaved exactly as its independently defined ground truth specified (whether that ground truth was a pass, defect, init error, or self-heal).
-* **API Classification Accuracy (5/5, 100%)**:
-  * *Denominator*: Strictly the 5 scenarios where endpoints actually initialized and ran test assertions (`multi-endpoint`, `inventory-defect`, `pagination-validation`, `pagination-boundary-defect`, `input-validation-defect`).
+* **API Classification Accuracy (6/6, 100%)**:
+  * *Denominator*: Strictly the 6 scenarios where endpoints actually initialized and ran test assertions (`multi-endpoint`, `inventory-defect`, `pagination-validation`, `pagination-boundary-defect`, `input-validation-defect`, `adversarial-boundary-defect`).
   * *Why excluded*: `broken-init` and `repair-import` test initialization crashes and harness recovery, not endpoint assertion verdicts.
-* **Known-Defect Detection Rate (3/3, 100%)**:
-  * *Denominator*: Strictly the 3 intentional defect scenarios.
+* **Known-Defect Detection Rate (4/4, 100%)**:
+  * *Denominator*: Strictly the 4 intentional defect scenarios (`inventory-defect`, `pagination-boundary-defect`, `input-validation-defect`, `adversarial-boundary-defect`).
 * **False-Positive Defect Count (0/2, 0%)**:
-  * *Denominator*: Strictly the 2 clean API scenarios.
-* **Scope Disclosure**: 7 scenarios represent a targeted synthetic benchmark demonstrating system behavior under controlled conditions. It does not establish a universal accuracy claim across all possible arbitrary real-world APIs.
+  * *Denominator*: Strictly the 2 clean API scenarios (`multi-endpoint`, `pagination-validation`).
+* **Scope Disclosure**: 8 scenarios represent a targeted synthetic benchmark demonstrating system behavior under controlled conditions. It does not establish a universal accuracy claim across all possible arbitrary real-world APIs.
 
 ---
 
@@ -273,8 +291,9 @@ In software evaluation, **denominators matter**. Inflating metrics creates false
 
 Keep this summary visible during a live demo or presentation:
 
-* **Clean Demo**: Click `Auth Route (Clean)` &rarr; `Generate & Test` &rarr; 13 passed, exit 0, view `test_app.py`.
+* **Clean Demo**: Click `Auth Route (Clean)` &rarr; Mode: `Standard Tests` &rarr; `Generate & Test` &rarr; 13 passed, exit 0, view `test_app.py`.
 * **Defect Demo**: Click `Checkout (Defect)` &rarr; `Generate & Test` &rarr; `ZeroDivisionError` detected, assertion failure isolated, no repair attempt.
+* **Adversarial Demo**: Toggle mode to `Adversarial Edge Cases` &rarr; `Generate & Test` &rarr; Meta Muse Spark generates boundary & negative tests; detects unhandled edge defects.
 * **Init Error Demo**: Remove `(BaseModel)` from `UserRegister` &rarr; `Generate & Test` &rarr; Application initialization error, exit 2, 0 endpoint assertions executed.
 * **Self-Healing Proof**: Reference `repair-import` in `PHASE5_LIVE_SUMMARY.md` &rarr; 1 repair attempt, 25/25 passed, 67/67 assertions preserved.
 * **Core Philosophy**: *"Generate executable tests, run them in isolation, trust only real execution evidence, and never weaken assertions to fake a passing result."*

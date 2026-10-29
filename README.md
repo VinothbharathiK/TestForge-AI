@@ -1,9 +1,12 @@
 # TestForge AI
 
 TestForge AI accepts FastAPI source, asks Meta Muse Spark to generate a pytest
-suite, runs that suite in an isolated Docker container, and makes up to three
+suite using either **Standard Tests** (default) or **Adversarial Edge Cases**,
+runs that suite in an isolated Docker container, and makes up to three
 test-repair attempts when pytest identifies a repairable test-harness failure.
-The browser UI is in `frontend/`; the API and agent are in `backend/`.
+The browser UI is in `frontend/`; the API and agent are in `backend/`. For a
+structured 3–5 minute presentation sequence and interview talking points, see
+[DEMO_SCRIPT.md](DEMO_SCRIPT.md).
 
 ## Windows setup
 
@@ -116,7 +119,7 @@ fakes in the unit suite.
 
 ```powershell
 .\backend\.venv\Scripts\python.exe -m pytest backend/tests -q
-.\backend\.venv\Scripts\python.exe -m py_compile backend\agent.py backend\sandbox.py backend\main.py backend\release_verify.py
+.\backend\.venv\Scripts\python.exe -m py_compile backend\agent.py backend\sandbox.py backend\main.py backend\release_verify.py backend\eval_phase5.py
 
 Set-Location frontend
 npm test
@@ -155,6 +158,7 @@ verification files. No production source or preset is edited.
 5. `broken-init`: Missing `BaseModel` inheritance (verifies FastAPI initialization error handling without false defect claims).
 6. `pagination-boundary-defect`: Articles pagination with slice boundary calculation off-by-one (`start = page * size`).
 7. `input-validation-defect`: Order placement accepting invalid non-positive `quantity <= 0` instead of rejecting with HTTP 400 Bad Request.
+8. `adversarial-boundary-defect`: Coupon discount API accepting negative discounts and whitespace coupon codes (verifies adversarial boundary probing and defect classification).
 
 Run the deterministic evaluation unit tests (no credentials, network, or Docker required):
 
@@ -172,23 +176,24 @@ To run an individual live scenario (requires Meta API credentials, network acces
 .\backend\.venv\Scripts\python.exe -m backend.eval_phase5 broken-init --live
 .\backend\.venv\Scripts\python.exe -m backend.eval_phase5 pagination-boundary-defect --live
 .\backend\.venv\Scripts\python.exe -m backend.eval_phase5 input-validation-defect --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 adversarial-boundary-defect --live
 ```
 
 Reports are written to `backend/eval_reports/` as both JSON and Markdown summaries. An aggregate verified summary is maintained in `backend/eval_reports/PHASE5_LIVE_SUMMARY.md`.
 
-Verified benchmark metrics (7 scenarios):
-- **Overall expected-outcome match:** 7/7 (100%).
-- **API outcome classification accuracy:** 5/5 (100%) across applicable endpoint executions (2/2 clean API outcomes and 3/3 known defect outcomes).
-- **Known-defect detection rate:** 3/3 (100%) intentional bugs correctly detected from executed assertions and classified as defects without false repairs.
+Verified benchmark metrics (8 scenarios):
+- **Overall expected-outcome match:** 8/8 (100%).
+- **API outcome classification accuracy:** 6/6 (100%) across applicable endpoint executions (2/2 clean API outcomes and 4/4 known defect outcomes).
+- **Known-defect detection rate:** 4/4 (100%) intentional bugs correctly detected from executed assertions and classified as defects without false repairs.
 - **False-positive count:** 0/2 (0%) clean APIs incorrectly flagged as defective.
 - **Repair success:** 1/1 (100%) eligible test-harness failure repaired with 67/67 (100%) baseline assertions preserved.
 - *Notice:* This targeted benchmark verifies core classification, bounded self-healing, and assertion preservation under controlled conditions; it is not a general accuracy guarantee across arbitrary public APIs.
 
 ## Hackathon demo
 
-Run the UI with the commands above and demonstrate these cases:
+For a complete walkthrough script, timing recommendations, and technical defense notes, see [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Run the UI with the commands above and demonstrate these cases:
 
-1. **Auth Route (Clean):** choose `User Auth & Profile (Clean)` and generate.
+1. **Auth Route (Clean):** choose `User Auth & Profile (Clean)` and generate in Standard mode.
    A verified pass has a nonzero collected and passed count, no failures or
    errors, pytest exit code 0, and a success status. Agent logs show the
    requested/returned model; technical output shows the pytest summary.
@@ -196,11 +201,15 @@ Run the UI with the commands above and demonstrate these cases:
    generate. A genuine defect requires executed assertion failures, a nonzero
    pytest exit, and `failure_type=assertion_failure`; it should not be inferred
    from a collection or setup error.
-3. **Invalid `UserRegister`:** in the Clean source, change
+3. **Adversarial Edge-Case Testing:** toggle the testing mode selector from
+   `Standard Tests` to `Adversarial Edge Cases` on an endpoint. The agent prompts
+   Meta Muse Spark to actively probe boundary values, negative and zero amounts,
+   blank/whitespace fields, and malformed types to surface unhandled edge defects.
+4. **Invalid `UserRegister`:** in the Clean source, change
    `class UserRegister(BaseModel):` to `class UserRegister:` and run it. The
    result should be an application initialization error, pytest exit 2, zero
    collected endpoint tests, one collection error, and no repair attempt.
-4. **Live self-heal:** run
+5. **Live self-heal:** run
    `python -m backend.release_verify --live self-heal`. The report should show
    the injected missing-fixture setup error and nonzero first pytest exit, one
    real `test_repair` Meta request, a subsequent Docker pytest pass, preserved

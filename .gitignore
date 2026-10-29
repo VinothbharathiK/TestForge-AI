@@ -13,6 +13,14 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Node dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.log
+**/.aistudio/
+
 # Generated evaluation run reports (keep summary tracked)
 backend/eval_reports/*.json
 backend/eval_reports/eval_phase5_*.md

@@ -17,16 +17,21 @@ export const SAMPLE_PRESETS = [
 // Pointing directly to your local FastAPI server
 const API_URL = 'http://localhost:8000/generate-tests';
 
+export const VALID_MODES = ['standard', 'adversarial'];
+
 // Renamed to match exactly what App.jsx is importing
-export const generateAndTestApi = async (codeSnippet) => {
+export const generateAndTestApi = async (codeSnippet, mode = 'standard') => {
   if (!codeSnippet || codeSnippet.trim() === "") {
     throw new Error("Code snippet cannot be empty.");
   }
 
+  const selectedMode = VALID_MODES.includes(mode) ? mode : 'standard';
+
   try {
-    // Send the raw Python code to our AI Orchestrator
+    // Send the raw Python code and mode to our AI Orchestrator
     const response = await axios.post(API_URL, {
-      code: codeSnippet
+      code: codeSnippet,
+      mode: selectedMode,
     });
 
     // Return the response dict exactly as FastAPI sends it

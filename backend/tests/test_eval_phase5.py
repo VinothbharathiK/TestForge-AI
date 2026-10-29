@@ -561,3 +561,61 @@ def test_evaluate_input_validation_defect_fails_on_clean_verdict():
     )
     assert not matched
     assert "expected defect_detected" in reason
+
+
+def test_adversarial_boundary_defect_metadata():
+    meta = SCENARIO_META.get("adversarial-boundary-defect")
+    assert meta is not None, "adversarial-boundary-defect must be registered"
+    assert meta["kind"] == "defect"
+    assert meta.get("mode") == "adversarial"
+    assert meta["known_bug"]
+    assert "discount_pct: float" in meta["source"]
+    assert "coupon_code: str" in meta["source"]
+    assert "/coupons/apply" in meta["source"]
+
+
+def test_evaluate_adversarial_boundary_defect_success():
+    result = _fake_result(
+        "defect_detected", "assertion_failure",
+        metrics={
+            "testsCollected": 12, "testsPassed": 8,
+            "testsFailed": 4, "testsErrored": 0, "pytestExitCode": 1,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "adversarial-boundary-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["adversarial-boundary-defect"]
+    )
+    assert matched, reason
+
+
+def test_evaluate_adversarial_boundary_defect_fails_on_clean_verdict():
+    result = _fake_result(
+        "success", None,
+        metrics={
+            "testsCollected": 12, "testsPassed": 12,
+            "testsFailed": 0, "testsErrored": 0, "pytestExitCode": 0,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "adversarial-boundary-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["adversarial-boundary-defect"]
+    )
+    assert not matched
+    assert "expected defect_detected" in reason
+
+
+def test_evaluate_adversarial_boundary_defect_fails_on_infrastructure_error():
+    result = _fake_result(
+        "error", "sandbox_error",
+        metrics={
+            "testsCollected": 0, "testsPassed": 0,
+            "testsFailed": 0, "testsErrored": 0, "pytestExitCode": None,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "adversarial-boundary-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["adversarial-boundary-defect"]
+    )
+    assert not matched
+    assert "expected defect_detected" in reason

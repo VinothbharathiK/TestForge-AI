@@ -1,14 +1,16 @@
 import os
 
+from typing import Literal
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 try:
-    from .agent import TestForgeAgent
+    from .agent import VALID_TESTING_MODES, TestForgeAgent
 except ImportError:  # Support `uvicorn main:app` from inside backend/.
-    from agent import TestForgeAgent
+    from agent import VALID_TESTING_MODES, TestForgeAgent
 
 
 DEFAULT_CORS_ORIGINS = (
@@ -42,8 +44,12 @@ app.add_middleware(
 )
 
 
+TestingMode = Literal["standard", "adversarial"]
+
+
 class CodePayload(BaseModel):
     code: str
+    mode: TestingMode = "standard"
 
 
 @app.post("/generate-tests")
@@ -51,7 +57,7 @@ async def generate_tests(payload: CodePayload):
     """Run Meta generation and Docker verification for supplied FastAPI code."""
     agent = TestForgeAgent()
     try:
-        result = await agent.generate_and_heal(payload.code)
+        result = await agent.generate_and_heal(payload.code, mode=payload.mode)
     finally:
         await agent.aclose()
 

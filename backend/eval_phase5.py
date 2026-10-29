@@ -16,6 +16,7 @@ Usage (from repository root):
     .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live broken-init
     .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live pagination-boundary-defect
     .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live input-validation-defect
+    .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live adversarial-boundary-defect
 
 Reports are written to backend/eval_reports/.
 """
@@ -301,6 +302,67 @@ def place_order(item: OrderItem):
     }
 '''.strip()
 
+# Scenario 8: Adversarial boundary & validation defect.
+# Contract:
+# - POST /coupons/apply applies a percentage coupon to a shopping cart total.
+# - cart_total must be > 0. If <= 0, return HTTP 400 Bad Request.
+# - discount_pct must be between 0.0 and 100.0 inclusive (0.0 <= discount_pct <= 100.0).
+#   If discount_pct < 0 or discount_pct > 100, return HTTP 400 Bad Request.
+# - coupon_code must not be empty or whitespace-only. If coupon_code.strip() == "", return HTTP 400 Bad Request.
+# - Returns:
+#     discount_applied = round(cart_total * (discount_pct / 100.0), 2)
+#     final_total = round(cart_total - discount_applied, 2)
+#     status = "applied"
+# Bug:
+# - Only checks discount_pct > 100; negative discount_pct (< 0) is missing, increasing the price!
+# - Only checks coupon_code == ""; whitespace-only strings like "   " are accepted as valid.
+# Adversarial edge-case mode systematically tests negative values and whitespace boundaries.
+# Expected: defect_detected, failure_type=assertion_failure, exit 1, 0 repairs.
+ADVERSARIAL_BOUNDARY_DEFECT_SOURCE = '''
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel
+
+app = FastAPI(title="Coupon Discount API")
+
+
+class DiscountRequest(BaseModel):
+    cart_total: float
+    discount_pct: float
+    coupon_code: str
+
+
+@app.post("/coupons/apply", status_code=status.HTTP_200_OK)
+def apply_coupon(req: DiscountRequest):
+    """Apply a percentage coupon to a shopping cart total.
+    Contract:
+    - cart_total must be > 0. If <= 0, return HTTP 400 Bad Request.
+    - discount_pct must be between 0.0 and 100.0 inclusive (0.0 <= discount_pct <= 100.0).
+      If discount_pct < 0 or discount_pct > 100, return HTTP 400 Bad Request.
+    - coupon_code must not be empty or whitespace-only. If coupon_code.strip() == "", return HTTP 400 Bad Request.
+    - Returns final_total = round(cart_total - round(cart_total * (discount_pct / 100.0), 2), 2).
+    """
+    if req.cart_total <= 0:
+        raise HTTPException(status_code=400, detail="Cart total must be positive")
+
+    # BUG: Only checks discount_pct > 100.0; negative discount_pct (< 0) is missing!
+    # Negative discount increases price and returns 200 instead of 400 Bad Request.
+    if req.discount_pct > 100.0:
+        raise HTTPException(status_code=400, detail="Discount cannot exceed 100%")
+
+    # BUG: Only checks empty string ""; whitespace-only strings like "   " are accepted!
+    if req.coupon_code == "":
+        raise HTTPException(status_code=400, detail="Coupon code cannot be empty")
+
+    discount = round(req.cart_total * (req.discount_pct / 100.0), 2)
+    final_total = round(req.cart_total - discount, 2)
+    return {
+        "coupon_code": req.coupon_code,
+        "discount_applied": discount,
+        "final_total": final_total,
+        "status": "applied",
+    }
+'''.strip()
+
 
 # ---------------------------------------------------------------------------
 # Scenario registry
@@ -386,6 +448,21 @@ SCENARIO_META: dict[str, dict[str, Any]] = {
         "known_bug": (
             "place_order accepts non-positive quantities (quantity <= 0) and returns 201 "
             "instead of returning 400 Bad Request"
+        ),
+    },
+    "adversarial-boundary-defect": {
+        "source": ADVERSARIAL_BOUNDARY_DEFECT_SOURCE,
+        "kind": "defect",
+        "mode": "adversarial",
+        "description": (
+            "Coupon Discount API where negative percentages (< 0) and whitespace coupon codes "
+            "are not rejected with HTTP 400 as required by contract. "
+            "Adversarial edge-case mode systematically tests negative values and whitespace boundaries. "
+            "Expect: status=defect_detected, failure_type=assertion_failure, exit 1."
+        ),
+        "known_bug": (
+            "apply_coupon fails to reject negative discount_pct (< 0) and whitespace coupon codes "
+            "with HTTP 400 Bad Request"
         ),
     },
 }
@@ -563,7 +640,8 @@ async def _run_eval_scenario(name: str) -> dict[str, Any]:
         else:
             agent = TestForgeAgent(sandbox=sandbox)
 
-        result = await agent.generate_and_heal(source)
+        mode = meta.get("mode", "standard")
+        result = await agent.generate_and_heal(source, mode=mode)
         elapsed_ms = round((time.monotonic() - t0) * 1000)
 
         logs = result.get("logs", [])
@@ -591,6 +669,7 @@ async def _run_eval_scenario(name: str) -> dict[str, Any]:
         report = {
             "scenario": name,
             "kind": meta["kind"],
+            "mode": mode,
             "description": meta["description"],
             "known_bug": meta["known_bug"],
             "expected_outcome_matched": matched,
@@ -724,8 +803,9 @@ def _markdown_report(
     lines.append("\n## Scenario Details\n")
     for r in results:
         icon = "✅" if r.get("expected_outcome_matched") else "❌"
-        lines.append(f"### {icon} `{r['scenario']}` ({r['kind']})\n")
+        lines.append(f"### {icon} `{r['scenario']}` ({r['kind']} - mode: {r.get('mode', 'standard')})\n")
         lines.append(f"**Description:** {r['description']}\n")
+        lines.append(f"**Mode:** `{r.get('mode', 'standard')}`  ")
         if r.get("known_bug"):
             lines.append(f"**Known bug:** {r['known_bug']}\n")
         lines.append(f"**Outcome matched:** `{r.get('expected_outcome_matched')}`  ")

@@ -22,7 +22,9 @@ export default function CodeInput({
   onGenerate,
   status,
   onSelectPreset,
-  activePresetId
+  activePresetId,
+  mode = 'standard',
+  onModeChange,
 }) {
   const isLoading = status === 'loading';
 
@@ -216,6 +218,48 @@ export default function CodeInput({
               ⌘/Ctrl + Enter
             </kbd>
             <span>to run</span>
+          </div>
+        </div>
+
+        {/* Test Generation Mode Selector */}
+        <div className="flex items-center justify-between gap-2 p-1.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+          <span className="pl-1.5 font-medium text-slate-600 flex items-center gap-1.5">
+            <span>Test Mode:</span>
+            {mode === 'adversarial' && (
+              <span className="text-[11px] font-semibold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                Boundaries &amp; Fuzzing
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-1" role="radiogroup" aria-label="Test generation mode">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'standard'}
+              onClick={() => onModeChange && onModeChange('standard')}
+              disabled={isLoading}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                mode === 'standard'
+                  ? 'bg-white text-purple-700 shadow-xs border border-slate-200 font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Standard Tests
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'adversarial'}
+              onClick={() => onModeChange && onModeChange('adversarial')}
+              disabled={isLoading}
+              className={`px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                mode === 'adversarial'
+                  ? 'bg-white text-rose-700 shadow-xs border border-slate-200 font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Adversarial Edge Cases
+            </button>
           </div>
         </div>
 
