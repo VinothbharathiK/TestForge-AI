@@ -154,7 +154,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-purple-100 selection:text-purple-900">
       {/* Top Navbar */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-xs">
-        <div className="w-[96%] max-w-[1600px] mx-auto px-1 sm:px-2 h-16 flex items-center justify-between">
+        <div className="tf-content-shell h-16 flex items-center justify-between gap-3">
           {/* Left: Brand & Badges */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-sm shadow-purple-200">
@@ -162,11 +162,11 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2.5">
-              <span className="text-lg font-bold text-slate-900 tracking-tight">
+              <span className="text-lg font-semibold text-slate-900 tracking-tight">
                 TestForge <span className="text-purple-600">AI</span>
               </span>
 
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/80">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[13px] font-semibold bg-purple-50 text-purple-700 border border-purple-200/80">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
                 Autonomous QA Agent
               </span>
@@ -176,7 +176,7 @@ export default function App() {
           {/* Center / Right: Engine Status & Presets */}
           <div className="flex items-center gap-3">
             {/* Quick Presets Toggle Pills */}
-            <div className="hidden md:flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200/80 text-xs">
+            <div className="hidden min-[1120px]:flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border border-slate-200/80 text-[13px]">
               <span className="px-2 text-slate-500 font-medium">Quick Demo:</span>
               <button
                 type="button"
@@ -203,7 +203,7 @@ export default function App() {
             </div>
 
             {/* Current Lifecycle Status Pill */}
-            <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700">
+            <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1 rounded-lg border border-slate-200 bg-white text-[13px] font-medium text-slate-700">
               <span className="text-slate-400">Status:</span>
               {status === 'idle' && (
                 <span className="text-slate-500 flex items-center gap-1.5">
@@ -251,7 +251,7 @@ export default function App() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 w-[96%] max-w-[1600px] mx-auto px-1 sm:px-2 py-4 sm:py-5 flex flex-col gap-4">
+      <main className="tf-content-shell flex-1 min-h-0 py-2 sm:py-3 flex flex-col gap-3">
         {/* Core State Notification Banners */}
         {status === 'idle' && (
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex items-center justify-between gap-4">
@@ -263,12 +263,12 @@ export default function App() {
                 <h3 className="text-sm font-semibold text-slate-900">
                   Ready to Synthesize &amp; Self-Heal API Tests
                 </h3>
-                <p className="text-xs text-slate-600 mt-0.5">
+                <p className="text-[13px] text-slate-600 mt-0.5">
                   Paste your FastAPI route definitions or choose a pre-configured template. TestForge AI will extract AST contracts, generate pytest suites, and isolate regressions.
                 </p>
               </div>
             </div>
-            <div className="hidden md:flex items-center gap-2 text-xs font-mono text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200/70 shrink-0">
+            <div className="hidden md:flex items-center gap-2 text-[13px] font-mono text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border border-purple-200/70 shrink-0">
               <span>Engine: pytest 8.x + TestClient</span>
             </div>
           </div>
@@ -283,11 +283,11 @@ export default function App() {
               <div>
                 <h3 className="text-sm font-semibold text-purple-950 flex items-center gap-2">
                   <span>Autonomous QA Agent in Progress...</span>
-                  <span className="text-xs font-mono font-normal text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                  <span className="text-[13px] font-mono font-normal text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
                     Step 3/4: Self-Healing &amp; Verification
                   </span>
                 </h3>
-                <p className="text-xs text-purple-800/80 mt-0.5">
+                <p className="text-[13px] text-purple-800/80 mt-0.5">
                   Fuzzing boundary inputs, testing status code contracts, and applying automated fixture repairs...
                 </p>
               </div>
@@ -306,11 +306,11 @@ export default function App() {
                   <h3 className="text-sm font-semibold text-emerald-950">
                     Autonomous Test Suite Generated &amp; Verified
                   </h3>
-                  <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                  <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
                     {metrics?.testsPassed ?? 0} Passed
                   </span>
                 </div>
-                <p className="text-xs text-emerald-800/90 mt-0.5">
+                <p className="text-[13px] text-emerald-800/90 mt-0.5">
                   Pytest exited with code {metrics?.pytestExitCode ?? 'unknown'} after {metrics?.testsPassed ?? 0} passing test{metrics?.testsPassed === 1 ? '' : 's'}.
                 </p>
               </div>
@@ -320,7 +320,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setActiveTab('suite')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
               >
                 <span>View test_app.py</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -338,14 +338,14 @@ export default function App() {
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-bold text-rose-950">
+                    <h3 className="text-sm font-semibold text-rose-950">
                       Defect Detected: API behavior did not satisfy a valid test assertion.
                     </h3>
-                    <span className="text-[11px] font-semibold bg-rose-200/80 text-rose-900 px-2 py-0.5 rounded-full border border-rose-300">
+                    <span className="text-xs font-semibold bg-rose-200/80 text-rose-900 px-2 py-0.5 rounded-full border border-rose-300">
                       ASSERTION FAILURE
                     </span>
                   </div>
-                  <p className="text-xs text-rose-900/90 mt-1 leading-relaxed">
+                  <p className="text-[13px] text-rose-900/90 mt-1 leading-relaxed">
                     {defectDetails?.message || errorMessage || 'The executed test assertions failed. Review the summary and raw pytest output before drawing conclusions.'}
                   </p>
                 </div>
@@ -354,7 +354,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setActiveTab('suite')}
-                className="self-start sm:self-auto shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-xs transition-colors cursor-pointer"
+                className="self-start sm:self-auto shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white shadow-xs transition-colors cursor-pointer"
               >
                 <span>Inspect Repro Test</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -363,20 +363,20 @@ export default function App() {
 
             {/* Defect diagnostic metadata */}
             {defectDetails && (
-              <div className="bg-white/90 border border-rose-200/80 rounded-lg p-3 sm:p-3.5 text-xs flex flex-col gap-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] text-rose-900">
+              <div className="bg-white/90 border border-rose-200/80 rounded-lg p-3 sm:p-3.5 text-[13px] flex flex-col gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-xs text-rose-900">
                   <div className="bg-rose-50/60 p-2 rounded border border-rose-100">
-                    <span className="text-rose-500 font-bold block mb-0.5">DEFECT TYPE</span>
+                    <span className="text-rose-500 font-semibold block mb-0.5">DEFECT TYPE</span>
                     <span>{defectDetails.type}</span>
                   </div>
                   <div className="bg-rose-50/60 p-2 rounded border border-rose-100">
-                    <span className="text-rose-500 font-bold block mb-0.5">LOCATION</span>
+                    <span className="text-rose-500 font-semibold block mb-0.5">LOCATION</span>
                     <span>{defectDetails.location}</span>
                   </div>
                 </div>
                 <div className="text-slate-800 pt-1 border-t border-rose-100">
                   <span className="font-semibold text-rose-900">AI Recommendation:</span>{' '}
-                  <code className="font-mono text-[11px] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
+                  <code className="font-mono text-xs bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
                     {defectDetails.recommendation}
                   </code>
                 </div>
@@ -390,16 +390,16 @@ export default function App() {
             <h3 className="text-sm font-semibold text-amber-950">
               {diagnosis?.title || (status === 'error' ? 'Generation or execution error' : 'Tests did not pass')}
             </h3>
-            <p className="text-xs text-amber-900 mt-1 whitespace-pre-wrap">
+            <p className="text-[13px] text-amber-900 mt-1 whitespace-pre-wrap">
               {errorMessage || 'The backend did not verify a passing test run.'}
             </p>
           </div>
         )}
 
         {/* Main Content Split Screen (Grid 12 cols: 6 Left, 6 Right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-5 items-stretch flex-1 min-h-0">
+        <div className="tf-workbench-grid flex-1 min-h-0">
           {/* Left Panel: Raw FastAPI Route Code Input */}
-          <div className="min-w-0 flex flex-col">
+          <div className="min-w-0 min-h-0 flex flex-col">
             <CodeInput
               code={code}
               onChange={handleCodeChange}
@@ -411,19 +411,19 @@ export default function App() {
           </div>
 
           {/* Right Panel: Output with Tabbed Interface */}
-          <div className="min-w-0 flex flex-col">
+          <div className="min-w-0 min-h-0 flex flex-col">
             <section 
               aria-label="Agent Output and Test Suite" 
-              className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[520px] h-[520px] lg:h-[min(68vh,640px)] lg:min-h-[550px] overflow-hidden"
+              className="tf-workbench-panel flex-1 bg-white rounded-xl shadow-sm border border-slate-200"
             >
               {/* Tabbed Navigation Bar */}
-              <div className="px-5 border-b border-slate-200 flex items-center justify-between bg-white">
+              <div className="shrink-0 px-5 border-b border-slate-200 flex items-center justify-between bg-white">
                 <nav className="flex items-center gap-6" aria-label="Output views">
                   {/* Tab 1: Agent Logs (Default) */}
                   <button
                     type="button"
                     onClick={() => setActiveTab('logs')}
-                    className={`py-3.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
+                    className={`py-3.5 text-[13px] sm:text-sm font-medium border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
                       activeTab === 'logs'
                         ? 'border-purple-600 text-purple-600 font-semibold'
                         : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -432,7 +432,7 @@ export default function App() {
                     <Terminal className="w-4 h-4" />
                     <span>Agent Logs</span>
                     {logs.length > 0 && (
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                      <span className={`text-xs font-mono px-1.5 py-0.2 rounded-full ${
                         activeTab === 'logs' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
                       }`}>
                         {logs.length}
@@ -444,7 +444,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('suite')}
-                    className={`py-3.5 text-xs sm:text-sm font-medium border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
+                    className={`py-3.5 text-[13px] sm:text-sm font-medium border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
                       activeTab === 'suite'
                         ? 'border-purple-600 text-purple-600 font-semibold'
                         : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -453,7 +453,7 @@ export default function App() {
                     <FileCode className="w-4 h-4" />
                     <span>Generated Suite</span>
                     {generatedTestCode && (
-                      <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                      <span className={`text-xs font-mono px-1.5 py-0.2 rounded-full ${
                         activeTab === 'suite' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
                       }`}>
                         test_app.py
@@ -463,17 +463,17 @@ export default function App() {
                 </nav>
 
                 {/* Tab auxiliary info */}
-                <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
+            <div className="hidden sm:flex items-center gap-2 text-[13px] text-slate-400">
                   {activeTab === 'logs' ? (
-                    <span className="font-mono text-[11px]">sandbox: pytest isolate</span>
+                    <span className="font-mono text-xs">sandbox: pytest isolate</span>
                   ) : (
-                    <span className="font-mono text-[11px]">syntax: python</span>
+                    <span className="font-mono text-xs">syntax: python</span>
                   )}
                 </div>
               </div>
 
               {/* Tab Panel Content */}
-              <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 {activeTab === 'logs' ? (
                   <AgentLogs
                     logs={logs}
@@ -499,8 +499,8 @@ export default function App() {
       </main>
 
       {/* Enterprise SaaS Footer */}
-      <footer className="mt-auto bg-white border-t border-slate-200 py-3.5">
-        <div className="w-[96%] max-w-[1600px] mx-auto px-1 sm:px-2 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <footer className="mt-auto bg-white border-t border-slate-200 py-2.5">
+        <div className="tf-content-shell flex flex-col sm:flex-row items-center justify-between gap-2 text-[13px] text-slate-500">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-800">TestForge AI</span>
             <span>&mdash; Autonomous API test-generation &amp; repair engine</span>

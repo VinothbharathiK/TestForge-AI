@@ -65,7 +65,7 @@ export default function CodeInput({
   return (
     <section 
       aria-label="FastAPI Route Input" 
-      className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[520px] h-[520px] lg:h-[min(68vh,640px)] lg:min-h-[550px] overflow-hidden transition-all duration-200"
+      className="tf-workbench-panel flex-1 bg-white rounded-xl shadow-sm border border-slate-200 transition-colors duration-200"
     >
       {/* Panel Header */}
       <div className="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-white shrink-0">
@@ -78,11 +78,11 @@ export default function CodeInput({
               <h2 className="text-sm font-semibold text-slate-900 tracking-tight">
                 FastAPI Route Definition
               </h2>
-              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+              <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
                 Python 3.11+
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-[13px] text-slate-500 mt-0.5">
               Paste ASGI router, endpoints, or Pydantic models below
             </p>
           </div>
@@ -98,7 +98,7 @@ export default function CodeInput({
               <select
                 id="sample-preset-select"
                 aria-label="Load sample FastAPI route"
-                className="appearance-none text-xs font-medium bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 pl-3 pr-8 py-1.5 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                className="appearance-none text-[13px] font-medium bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 pl-3 pr-8 py-1.5 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                 value={activePresetId || ''}
                 onChange={(e) => onSelectPreset(e.target.value)}
                 disabled={isLoading}
@@ -156,7 +156,7 @@ export default function CodeInput({
             placeholder={`# Paste your FastAPI endpoint code here...\n\nfrom fastapi import FastAPI\napp = FastAPI()\n\n@app.get("/items/{item_id}")\ndef read_item(item_id: int):\n    return {"item_id": item_id, "status": "active"}`}
             spellCheck={false}
             disabled={isLoading}
-            className="w-full flex-1 p-3.5 font-mono text-xs sm:text-[13px] leading-6 text-slate-800 bg-transparent resize-none border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400 font-normal overflow-y-auto"
+            className="w-full flex-1 p-3.5 font-mono text-[13px] sm:text-sm leading-6 text-slate-800 bg-transparent resize-none border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400 font-normal overflow-y-auto"
             style={{ tabSize: 4 }}
           />
 
@@ -167,14 +167,14 @@ export default function CodeInput({
               <p className="text-sm font-medium text-slate-600 mb-1">
                 Editor is empty
               </p>
-              <p className="text-xs text-slate-400 max-w-xs mb-3">
+              <p className="text-[13px] text-slate-400 max-w-xs mb-3">
                 Paste your FastAPI routes or choose a pre-configured scenario to test:
               </p>
               <div className="flex flex-wrap gap-2 pointer-events-auto">
                 <button
                   type="button"
                   onClick={() => onSelectPreset('auth-clean')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-slate-200 hover:border-purple-200 shadow-xs transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-700 border border-slate-200 hover:border-purple-200 shadow-xs transition-colors cursor-pointer"
                 >
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                   Load Auth API (Clean)
@@ -182,7 +182,7 @@ export default function CodeInput({
                 <button
                   type="button"
                   onClick={() => onSelectPreset('checkout-defect')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 shadow-xs transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 hover:border-rose-200 shadow-xs transition-colors cursor-pointer"
                 >
                   <Bug className="w-3.5 h-3.5 text-rose-500" />
                   Load Buggy Route (Defect)
@@ -196,7 +196,7 @@ export default function CodeInput({
       {/* Editor Footer & Action Button */}
       <div className="p-4 bg-white flex flex-col gap-3">
         {/* Real-time stats bar */}
-        <div className="flex items-center justify-between text-xs text-slate-500">
+        <div className="flex items-center justify-between text-[13px] text-slate-500">
           <div className="flex items-center gap-3">
             <span>
               <strong className="text-slate-700 font-medium">{stats.routeCount}</strong> {stats.routeCount === 1 ? 'route' : 'routes'} detected
@@ -211,8 +211,8 @@ export default function CodeInput({
             </span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1 text-[11px] text-slate-400">
-            <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200 font-mono text-[10px]">
+          <div className="hidden sm:flex items-center gap-1 text-[13px] text-slate-400">
+            <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 border border-slate-200 font-mono text-xs">
               ⌘/Ctrl + Enter
             </kbd>
             <span>to run</span>
@@ -224,7 +224,7 @@ export default function CodeInput({
           type="button"
           onClick={onGenerate}
           disabled={isLoading || !code || code.trim().length === 0}
-          className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-semibold py-3 px-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-150 flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-4 focus:ring-purple-500/20"
+          className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white text-[14px] font-semibold py-3 px-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-150 flex items-center justify-center gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-4 focus:ring-purple-500/20"
         >
           {isLoading ? (
             <>

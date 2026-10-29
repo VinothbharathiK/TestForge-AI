@@ -102,7 +102,7 @@ export default function TestViewer({
         <h3 className="text-sm font-semibold text-slate-700 mb-1">
           No Test Suite Generated Yet
         </h3>
-        <p className="text-xs text-slate-500 max-w-sm mb-4">
+        <p className="text-[13px] text-slate-500 max-w-sm mb-4">
           Paste your FastAPI route definition on the left and click &quot;Generate &amp; Test&quot; to inspect the generated test suite.
         </p>
       </div>
@@ -112,7 +112,7 @@ export default function TestViewer({
   return (
     <div className="flex flex-col h-full bg-white rounded-b-xl overflow-hidden">
       {/* Test Suite Summary Banner */}
-      <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[13px]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-mono font-medium text-slate-800">
             <FileCode2 className="w-4 h-4 text-purple-600" />
@@ -126,14 +126,14 @@ export default function TestViewer({
           </span>
 
           {metrics?.healedFixtures > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
               <Sparkles className="w-3 h-3 text-amber-500" />
               1 Fixture Self-Healed
             </span>
           )}
 
           {isDefect && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 text-rose-800 border border-rose-200">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-800 border border-rose-200">
               <ShieldAlert className="w-3 h-3 text-rose-500" />
               Defect Repro Included
             </span>
@@ -145,7 +145,7 @@ export default function TestViewer({
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-colors cursor-pointer"
           >
             {copied ? (
               <>
@@ -163,7 +163,7 @@ export default function TestViewer({
           <button
             type="button"
             onClick={handleDownload}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 shadow-xs transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 shadow-xs transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-purple-600" />
             <span>Download test_app.py</span>
@@ -172,7 +172,7 @@ export default function TestViewer({
       </div>
 
       {/* Code Viewer Container */}
-      <div className="flex-1 min-h-0 overflow-auto bg-slate-50 flex font-mono text-xs sm:text-[13px] border-b border-slate-200">
+      <div className="flex-1 min-h-0 overflow-auto bg-slate-50 flex font-mono text-[13px] sm:text-sm border-b border-slate-200">
         {/* Line Numbers */}
         <div 
           aria-hidden="true" 
@@ -196,10 +196,10 @@ export default function TestViewer({
       </div>
 
       {/* Test Metrics Footer */}
-      <div className="px-5 py-3 bg-white flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+      <div className="px-5 py-3 bg-white flex flex-wrap items-center justify-between gap-3 text-[13px] text-slate-500">
         <div className="flex items-center gap-2">
           <FileCheck className="w-4 h-4 text-emerald-600" />
-          <span>Ready for CI/CD integration: Run with <code className="font-mono bg-slate-100 text-slate-800 px-1 py-0.5 rounded text-[11px]">pytest -v</code></span>
+          <span>Ready for CI/CD integration: Run with <code className="font-mono bg-slate-100 text-slate-800 px-1 py-0.5 rounded text-xs">pytest -v</code></span>
         </div>
 
         <div className="flex items-center gap-3">
