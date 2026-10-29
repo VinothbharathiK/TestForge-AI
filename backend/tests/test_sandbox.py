@@ -144,6 +144,8 @@ def test_fastapi_error_for_non_pydantic_route_model_is_application_initializatio
     )
     output = (
         b"ERROR collecting test_app.py\n"
+        b"/workspace/test_app.py:1: in <module>\n    from main import app\n"
+        b"/workspace/main.py:6: in <module>\n    @app.post('/register')\n"
         b"fastapi.exceptions.FastAPIError: Invalid args for response field!\n"
         b"__TESTFORGE_PYTEST_EXIT_CODE__=2\n"
         + report.encode()
@@ -185,6 +187,77 @@ def test_fastapi_error_for_non_pydantic_route_model_is_application_initializatio
     assert diagnosis["exception_message"] == "Invalid args for response field!"
     assert client.container.removed is True
     assert client.closed is True
+
+
+def test_fastapi_error_in_generated_test_module_is_not_assigned_to_application():
+    report = (
+        '<testsuites tests="1" failures="0" errors="1" skipped="0">'
+        '<testsuite tests="1" failures="0" errors="1" skipped="0">'
+        '<testcase><error type="FastAPIError" message="Invalid args for response field">'
+        'FastAPIError: Invalid args for response field</error></testcase>'
+        '</testsuite></testsuites>'
+    )
+    output = (
+        b"ERROR collecting test_app.py\n"
+        b"/workspace/test_app.py:4: in <module>\n    @test_app.post('/health')\n"
+        b"fastapi.exceptions.FastAPIError: Invalid args for response field!\n"
+        b"__TESTFORGE_PYTEST_EXIT_CODE__=2\n" + report.encode()
+    )
+    client = FakeDockerClient(FakeContainer(output, exit_code=2))
+    sandbox = ExecutionSandbox(timeout_seconds=2)
+
+    with patch("backend.sandbox.docker.from_env", return_value=client):
+        passed, logs = asyncio.run(
+            sandbox.run_test_in_docker(
+                "from fastapi import FastAPI\ntest_app = FastAPI()",
+                "from fastapi import FastAPI\napp = FastAPI()",
+            )
+        )
+
+    result = parse_result(logs)
+    assert passed is False
+    assert result["error_type"] == "test_collection_error"
+    assert result["collected"] == 0
+    assert result["errors"] == 1
+    assert result["diagnosis"]["category"] == "test_collection_error"
+
+
+def test_application_import_error_in_main_is_not_mislabeled_as_test_collection_error():
+    report = (
+        '<testsuites tests="1" failures="0" errors="1" skipped="0">'
+        '<testsuite tests="1" failures="0" errors="1" skipped="0">'
+        '<testcase><error type="ImportError" message="missing app dependency">'
+        'ImportError: missing app dependency</error></testcase>'
+        '</testsuite></testsuites>'
+    )
+    output = (
+        b"ERROR collecting test_app.py\n"
+        b"/workspace/test_app.py:1: in <module>\n    from main import app\n"
+        b"/workspace/main.py:1: in <module>\n    from broken_dependency import value\n"
+        b"E ImportError: missing app dependency\n"
+        b"__TESTFORGE_PYTEST_EXIT_CODE__=2\n" + report.encode()
+    )
+    client = FakeDockerClient(FakeContainer(output, exit_code=2))
+    sandbox = ExecutionSandbox(timeout_seconds=2)
+
+    with patch("backend.sandbox.docker.from_env", return_value=client):
+        passed, logs = asyncio.run(
+            sandbox.run_test_in_docker(
+                "from main import app\n\ndef test_health(): assert app is not None",
+                "from broken_dependency import value",
+            )
+        )
+
+    result = parse_result(logs)
+    assert passed is False
+    assert result["error_type"] == "application_error"
+    assert result["exit_code"] == 2
+    assert result["collected"] == 0
+    assert result["passed"] == 0
+    assert result["failures"] == 0
+    assert result["errors"] == 1
+    assert result["diagnosis"]["endpoint_assertions_ran"] is False
+    assert result["diagnosis"]["exception_type"] == "ImportError"
 
 
 def test_collection_error_with_junit_test_error_is_not_counted_as_executed_test():
@@ -243,6 +316,39 @@ def test_fixture_setup_error_stays_distinct_from_collection_and_assertion_errors
     assert result["failures"] == 0
     assert result["errors"] == 1
     assert result["diagnosis"]["endpoint_assertions_ran"] is False
+
+
+def test_test_execution_error_without_setup_or_assertion_evidence_is_inconclusive():
+    report = (
+        '<testsuites tests="1" failures="0" errors="1" skipped="0">'
+        '<testsuite tests="1" failures="0" errors="1" skipped="0">'
+        '<testcase><error type="RuntimeError">application handler raised</error>'
+        '</testcase></testsuite></testsuites>'
+    )
+    output = (
+        b"ERROR test_app.py::test_health - RuntimeError: application handler raised\n"
+        b"__TESTFORGE_PYTEST_EXIT_CODE__=1\n" + report.encode()
+    )
+    client = FakeDockerClient(FakeContainer(output, exit_code=1))
+    sandbox = ExecutionSandbox(timeout_seconds=2)
+
+    with patch("backend.sandbox.docker.from_env", return_value=client):
+        passed, logs = asyncio.run(
+            sandbox.run_test_in_docker(
+                "def test_health(): raise RuntimeError('application handler raised')",
+                "app = None",
+            )
+        )
+
+    result = parse_result(logs)
+    assert passed is False
+    assert result["error_type"] == "inconclusive"
+    assert result["collected"] == 1
+    assert result["passed"] == 0
+    assert result["failures"] == 0
+    assert result["errors"] == 1
+    assert result["diagnosis"]["category"] == "inconclusive"
+    assert "does not confirm an API defect" in result["diagnosis"]["message"]
 
 
 def test_all_skipped_tests_have_distinct_non_passing_classification():

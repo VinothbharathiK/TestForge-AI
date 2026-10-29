@@ -275,11 +275,19 @@ class ExecutionSandbox:
             )
         )
 
-        # A FastAPIError emitted while importing/registering the application is
-        # conclusive initialization evidence, even when JUnit reports it as a
-        # test error and sets tests=1. It must never reach the AI defect classifier.
+        application_source_frame = re.search(
+            r"(?im)(?:[A-Za-z]:)?[^\s\r\n]*[\\/]?main\.py:\d+:\s+in\s+<module>|"
+            r"File\s+['\"][^'\"]*main\.py['\"],?\s+line\s+\d+",
+            output,
+        )
+
+        # A FastAPIError from the submitted main.py while pytest is collecting
+        # is conclusive initialization evidence. The exception name alone is
+        # insufficient: generated test modules can also define invalid routes.
         is_fastapi_initialization_error = (
             pytest_exit == 2
+            and is_collection_error
+            and application_source_frame
             and (
                 "fastapi.exceptions.fastapierror" in lower_output
                 or "invalid args for response field" in lower_output
@@ -325,6 +333,28 @@ class ExecutionSandbox:
             if suggestion:
                 diagnosis["suggestion"] = suggestion
             return "application_error", diagnosis
+
+        if is_collection_error and application_source_frame:
+            return "application_error", {
+                "category": "application_error",
+                "title": "Application Initialization Error",
+                "message": (
+                    "The application source failed while importing or registering "
+                    "routes. Pytest could not collect the tests, so no endpoint "
+                    "assertions were executed."
+                ),
+                "likely_cause": (
+                    "An exception originated in main.py during application "
+                    "initialization or route registration."
+                ),
+                "exception_type": exception_type,
+                "exception_message": exception_message,
+                "endpoint_assertions_ran": False,
+                "suggestion": (
+                    "Review the main.py traceback and correct the application "
+                    "import or route-registration error before rerunning."
+                ),
+            }
 
         if is_collection_error:
             # Syntax and import mistakes in the generated test file are harness
@@ -409,13 +439,33 @@ class ExecutionSandbox:
             }
 
         if counts["errors"] > 0:
-            return "test_setup_error", {
-                "category": "test_setup_error",
-                "title": "Test Setup Error",
-                "message": "Pytest collected tests but failed during fixture or test setup. This does not by itself establish an API defect.",
+            is_setup_failure = bool(
+                re.search(
+                    r"(?im)ERROR\s+at\s+setup\s+of\b|"
+                    r"fixture\s+['\"][^'\"]+['\"]\s+not\s+found|"
+                    r"FixtureLookupError|ScopeMismatch",
+                    output,
+                )
+            )
+            if is_setup_failure:
+                return "test_setup_error", {
+                    "category": "test_setup_error",
+                    "title": "Test Setup Error",
+                    "message": "Pytest collected tests but failed during fixture or test setup. This does not by itself establish an API defect.",
+                    "exception_type": exception_type,
+                    "exception_message": exception_message,
+                    "endpoint_assertions_ran": False,
+                }
+            return "inconclusive", {
+                "category": "inconclusive",
+                "title": "Test Run Inconclusive",
+                "message": (
+                    "Pytest collected tests but reported an execution error without "
+                    "clear fixture-setup or assertion evidence. The run does not "
+                    "confirm an API defect."
+                ),
                 "exception_type": exception_type,
                 "exception_message": exception_message,
-                "endpoint_assertions_ran": False,
             }
 
         if counts["failures"] > 0:

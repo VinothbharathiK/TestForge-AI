@@ -7,11 +7,10 @@ const METRIC_FIELDS = [
 
 export function isVerifiedPass(result) {
   const metrics = result?.metrics;
-  const preAssertionFailure = ['application_error', 'test_collection_error', 'test_setup_error']
-    .includes(result?.failure_type || result?.diagnosis?.category);
+  const failureType = result?.failure_type || result?.diagnosis?.category;
   return result?.status === 'success'
     && result?.defect_detected !== true
-    && !preAssertionFailure
+    && !failureType
     && result?.diagnosis?.endpoint_assertions_ran !== false
     && metrics?.pytestExitCode === 0
     && Number(metrics?.testsCollected) > 0
@@ -23,7 +22,7 @@ export function isVerifiedPass(result) {
 export function isConfirmedDefect(result) {
   const failureType = result?.failure_type || result?.diagnosis?.category;
   return (result?.status === 'defect_detected' || result?.defect_detected === true)
-    && !['application_error', 'test_collection_error', 'test_setup_error'].includes(failureType)
+    && failureType === 'assertion_failure'
     && result?.diagnosis?.endpoint_assertions_ran !== false
     && Number(result?.metrics?.testsFailed) > 0;
 }
@@ -80,6 +79,9 @@ export function summarizeResult({ status, metrics, diagnosis, failureType, logs 
   } else if (failureType === 'test_setup_error') {
     title = 'Test Setup Error';
     message = diagnosis?.message || 'Pytest collected tests but failed during fixture or test setup.';
+  } else if (failureType === 'inconclusive' || diagnosis?.category === 'inconclusive') {
+    title = diagnosis?.title || 'Test Run Inconclusive';
+    message = diagnosis?.message || 'Pytest reported an execution error without enough evidence to confirm an API defect.';
   } else if (failureType === 'unverified_result') {
     title = 'Run Not Verified';
     message = diagnosis?.message || 'The backend marked this run successful without confirming a passing pytest execution.';
@@ -111,6 +113,8 @@ export function summarizeResult({ status, metrics, diagnosis, failureType, logs 
     details.push('Execution status: Defect detected');
   } else if (status === 'error') {
     details.push('Execution status: Infrastructure or generation error');
+  } else if (failureType === 'inconclusive' || diagnosis?.category === 'inconclusive') {
+    details.push('Execution status: Inconclusive');
   }
   if (model) details.push(`Model: ${model.requested || 'unknown'} → ${model.returned || 'unknown'}`);
   if (repairAttempts > 0) details.push(`${repairAttempts} repair attempt${repairAttempts === 1 ? '' : 's'}`);

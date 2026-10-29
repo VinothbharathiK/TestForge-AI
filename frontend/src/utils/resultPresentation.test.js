@@ -94,6 +94,22 @@ test('collection error evidence takes priority over a stale defect label', () =>
   }), false);
 });
 
+test('only an executed assertion failure can produce a confirmed defect', () => {
+  const verifiedDefect = {
+    status: 'defect_detected',
+    defect_detected: true,
+    failure_type: 'assertion_failure',
+    diagnosis: { endpoint_assertions_ran: true },
+    metrics: { testsCollected: 2, testsPassed: 1, testsFailed: 1, testsErrored: 0, pytestExitCode: 1 },
+  };
+
+  assert.equal(isConfirmedDefect(verifiedDefect), true);
+  assert.equal(isConfirmedDefect({
+    ...verifiedDefect,
+    failure_type: 'inconclusive',
+  }), false);
+});
+
 test('zero tests and all-skipped suites stay non-passing and distinct', () => {
   const zeroTests = summarizeResult({
     status: 'failed',
@@ -114,6 +130,23 @@ test('zero tests and all-skipped suites stay non-passing and distinct', () => {
 test('test setup and sandbox errors have separate neutral summaries', () => {
   assert.equal(summarizeResult({ status: 'failed', failureType: 'test_setup_error' }).title, 'Test Setup Error');
   assert.equal(summarizeResult({ status: 'error', failureType: 'docker_unavailable' }).title, 'Sandbox Error');
+});
+
+test('inconclusive and unknown statuses never render as verified passes', () => {
+  const summary = summarizeResult({
+    status: 'failed',
+    failureType: 'inconclusive',
+    diagnosis: {
+      category: 'inconclusive',
+      message: 'Pytest reported an execution error without enough evidence.',
+    },
+  });
+
+  assert.equal(summary.title, 'Test Run Inconclusive');
+  assert.match(summary.message, /without enough evidence/);
+  assert.equal(isVerifiedPass({ status: 'inconclusive', metrics: { pytestExitCode: 0, testsCollected: 1, testsPassed: 1 } }), false);
+  assert.equal(isVerifiedPass({ status: 'unexpected', metrics: { pytestExitCode: 0, testsCollected: 1, testsPassed: 1 } }), false);
+  assert.equal(isVerifiedPass({ status: 'success', failure_type: 'unknown', metrics: { pytestExitCode: 0, testsCollected: 1, testsPassed: 1 } }), false);
 });
 
 test('raw pytest/XML output is hidden from the concise log stream but retained', () => {

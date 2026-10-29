@@ -322,6 +322,37 @@ def test_assertion_failure_is_classified_as_defect_without_rewriting_test():
     assert client.chat.completions.create.await_count == 2
 
 
+def test_inconclusive_execution_error_is_not_overridden_by_meta_defect_verdict():
+    client = fake_client(model_response(VALID_TEST), model_response("API_DEFECT"))
+    sandbox = FakeSandbox(
+        [
+            (
+                False,
+                sandbox_output(
+                    meta(
+                        exit_code=1,
+                        collected=1,
+                        passed=0,
+                        errors=1,
+                        error_type="inconclusive",
+                    ),
+                    "RuntimeError during test execution",
+                ),
+            )
+        ]
+    )
+    agent = TestForgeAgent(client=client, sandbox=sandbox, environ={})
+
+    result = asyncio.run(agent.generate_and_heal("from fastapi import FastAPI"))
+
+    assert result["status"] == "failed"
+    assert result["defect_detected"] is False
+    assert result["failure_type"] == "inconclusive"
+    assert result["metrics"]["testsCollected"] == 1
+    assert result["metrics"]["testsErrored"] == 1
+    assert client.chat.completions.create.await_count == 1
+
+
 def test_repair_attempts_are_limited_to_three():
     client = fake_client(*(model_response("not valid Python") for _ in range(4)))
     agent = TestForgeAgent(client=client, sandbox=FakeSandbox([]), environ={})

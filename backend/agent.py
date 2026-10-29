@@ -238,6 +238,12 @@ class TestForgeAgent:
                             "stopping without labeling the API defective."
                         )
                         return self._result("failed", False, logs, last_code, metadata)
+                    elif failure_category == "inconclusive":
+                        logs.append(
+                            "[WARN] Pytest reported an execution error without enough "
+                            "evidence to identify an API defect or repairable setup issue."
+                        )
+                        return self._result("failed", False, logs, last_code, metadata)
                     elif failure_category == "test_setup_error":
                         logs.append(
                             "[REPAIR] Pytest collected tests but fixture/setup execution "
