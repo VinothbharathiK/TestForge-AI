@@ -100,6 +100,7 @@ class TestForgeAgent:
         repair_attempts = 0
         while True:
             generation_number = repair_attempts + 1
+            request_purpose = "test_generation" if repair_attempts == 0 else "test_repair"
             logs.append(
                 f"[AGENT] Requesting test code (generation {generation_number}, "
                 f"repair attempts {repair_attempts}/{MAX_REPAIR_ATTEMPTS})..."
@@ -114,10 +115,12 @@ class TestForgeAgent:
                     timeout=self._client_timeout,
                 )
             except Exception as exc:
-                logs.append(self._api_failure_event(exc, "test_generation"))
-                return self._result("error", False, logs, last_code, last_metadata)
+                logs.append(self._api_failure_event(exc, request_purpose))
+                # The preceding pytest metadata describes an older run and must
+                # not be presented as the cause of a failed Meta repair request.
+                return self._result("error", False, logs, last_code)
 
-            logs.append(self._api_success_event(response, "test_generation"))
+            logs.append(self._api_success_event(response, request_purpose))
 
             choice = (getattr(response, "choices", None) or [None])[0]
             message = getattr(choice, "message", None)

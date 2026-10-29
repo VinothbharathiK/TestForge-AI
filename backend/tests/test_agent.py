@@ -292,11 +292,48 @@ def test_fixture_error_is_repaired_and_then_real_pass_is_reported():
         and "request_id=req_testforge_sample" in entry
         for entry in result["logs"]
     )
+    assert result["code"] == VALID_TEST.strip()
+    assert any("purpose=test_generation" in entry for entry in result["logs"])
+    assert any("purpose=test_repair" in entry for entry in result["logs"])
+    assert any("[HEAL] Repair attempt 1/3" in entry for entry in result["logs"])
     assert client.chat.completions.create.await_count == 2
     repair_prompt = client.chat.completions.create.await_args_list[1].kwargs["messages"][-1]["content"]
     assert "Previous test code" in repair_prompt
     assert VALID_TEST in repair_prompt
     assert "Do not classify the API as defective" in repair_prompt
+    assert "preserve all meaningful API behavior assertions" in repair_prompt
+
+
+def test_meta_timeout_during_repair_is_not_reported_as_the_previous_pytest_error():
+    client = fake_client(model_response(VALID_TEST), TimeoutError("secret test detail"))
+    sandbox = FakeSandbox(
+        [
+            (
+                False,
+                sandbox_output(
+                    meta(exit_code=1, collected=1, passed=0, errors=1, error_type="test_setup_error"),
+                    "ERROR at setup of test_health: fixture not found",
+                ),
+            )
+        ]
+    )
+    agent = TestForgeAgent(client=client, sandbox=sandbox, environ={})
+
+    result = asyncio.run(agent.generate_and_heal("from fastapi import FastAPI"))
+
+    assert result["status"] == "error"
+    assert result["defect_detected"] is False
+    assert "failure_type" not in result
+    assert "metrics" not in result
+    assert any(
+        "purpose=test_repair" in entry
+        and "outcome=failure" in entry
+        and "category=timed_out" in entry
+        for entry in result["logs"]
+    )
+    assert all("secret test detail" not in entry for entry in result["logs"])
+    assert len(sandbox.calls) == 1
+    assert client.chat.completions.create.await_count == 2
 
 
 def test_assertion_failure_is_classified_as_defect_without_rewriting_test():
