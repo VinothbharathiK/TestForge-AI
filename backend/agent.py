@@ -17,9 +17,19 @@ except ImportError:  # Environment variables can also be supplied by the process
     load_dotenv = None
 
 try:
-    from .sandbox import RESULT_MARKER, ExecutionSandbox
+    from .sandbox import (
+        DEFAULT_MAX_SOURCE_BYTES,
+        DEFAULT_MAX_TEST_BYTES,
+        RESULT_MARKER,
+        ExecutionSandbox,
+    )
 except ImportError:  # Support `uvicorn main:app` from inside backend/.
-    from sandbox import RESULT_MARKER, ExecutionSandbox
+    from sandbox import (
+        DEFAULT_MAX_SOURCE_BYTES,
+        DEFAULT_MAX_TEST_BYTES,
+        RESULT_MARKER,
+        ExecutionSandbox,
+    )
 
 
 MAX_REPAIR_ATTEMPTS = 3
@@ -65,6 +75,12 @@ class TestForgeAgent:
                 max_retries=0,
             )
         self.sandbox = sandbox or ExecutionSandbox()
+        self.max_source_bytes = getattr(
+            self.sandbox, "max_source_bytes", DEFAULT_MAX_SOURCE_BYTES
+        )
+        self.max_test_bytes = getattr(
+            self.sandbox, "max_test_bytes", DEFAULT_MAX_TEST_BYTES
+        )
 
     async def generate_and_heal(self, user_code: str) -> dict[str, Any]:
         logs = ["[AGENT] Connecting to Meta Model API..."]
@@ -73,6 +89,34 @@ class TestForgeAgent:
 
         if not user_code.strip():
             return self._result("error", False, logs + ["[ERROR] FastAPI source is empty."], "")
+        try:
+            source_size = len(user_code.encode("utf-8"))
+        except UnicodeEncodeError:
+            return self._result(
+                "error",
+                False,
+                logs + ["[ERROR] FastAPI source must be valid UTF-8 text."],
+                "",
+            )
+        if source_size > self.max_source_bytes:
+            message = (
+                f"FastAPI source exceeds the configured {self.max_source_bytes}-byte "
+                "limit; no Meta or Docker request was made."
+            )
+            return self._result(
+                "error",
+                False,
+                logs + [f"[ERROR] {message}"],
+                "",
+                {
+                    "error_type": "sandbox_error",
+                    "diagnosis": {
+                        "category": "sandbox_error",
+                        "title": "Source Input Too Large",
+                        "message": message,
+                    },
+                },
+            )
         if not self.api_key and self.client is None:
             return self._result(
                 "error",
@@ -144,6 +188,29 @@ class TestForgeAgent:
                     return self._result("failed", False, logs, last_code, last_metadata)
 
                 last_code = response_text.strip()
+                if len(last_code.encode("utf-8")) > self.max_test_bytes:
+                    message = (
+                        "The generated test suite exceeds the configured "
+                        f"{self.max_test_bytes}-byte limit; Docker execution and "
+                        "further repair requests were stopped."
+                    )
+                    logs.append(f"[ERROR] {message}")
+                    return self._result(
+                        "failed",
+                        False,
+                        logs,
+                        "",
+                        {
+                            "error_type": "invalid_generated_tests",
+                            "diagnosis": {
+                                "category": "invalid_generated_tests",
+                                "title": "Generated Test Suite Too Large",
+                                "message": message,
+                                "endpoint_assertions_ran": False,
+                            },
+                        },
+                    )
+
                 valid, validation_error = self._validate_pytest(last_code)
                 if not valid:
                     failure_output = validation_error

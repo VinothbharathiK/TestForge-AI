@@ -72,6 +72,43 @@ def test_missing_credentials_returns_error_without_calling_model():
     assert agent.client is None
 
 
+def test_oversized_source_is_rejected_before_a_model_request():
+    client = fake_client()
+    sandbox = FakeSandbox([])
+    sandbox.max_source_bytes = 12
+    agent = TestForgeAgent(client=client, sandbox=sandbox, environ={})
+
+    result = asyncio.run(agent.generate_and_heal("x" * 13))
+
+    assert result["status"] == "error"
+    assert result["defect_detected"] is False
+    assert result["failure_type"] == "sandbox_error"
+    assert result["diagnosis"]["title"] == "Source Input Too Large"
+    assert "no Meta or Docker request was made" in result["diagnosis"]["message"]
+    assert result["code"] == ""
+    assert client.chat.completions.create.await_count == 0
+    assert sandbox.calls == []
+
+
+def test_oversized_generated_suite_is_rejected_before_parse_or_docker():
+    oversized_suite = VALID_TEST + "\n# " + ("x" * 256)
+    client = fake_client(model_response(oversized_suite))
+    sandbox = FakeSandbox([])
+    sandbox.max_test_bytes = 64
+    agent = TestForgeAgent(client=client, sandbox=sandbox, environ={})
+
+    result = asyncio.run(agent.generate_and_heal("from fastapi import FastAPI"))
+
+    assert result["status"] == "failed"
+    assert result["defect_detected"] is False
+    assert result["failure_type"] == "invalid_generated_tests"
+    assert result["diagnosis"]["endpoint_assertions_ran"] is False
+    assert "further repair requests were stopped" in result["diagnosis"]["message"]
+    assert result["code"] == ""
+    assert client.chat.completions.create.await_count == 1
+    assert sandbox.calls == []
+
+
 def test_model_timeout_returns_error_not_success():
     client = fake_client(TimeoutError("request timed out"))
     agent = TestForgeAgent(client=client, sandbox=FakeSandbox([]), environ={})

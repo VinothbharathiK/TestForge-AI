@@ -21,6 +21,8 @@ from docker.errors import DockerException, ImageNotFound
 RESULT_MARKER = "__TESTFORGE_RESULT_JSON__="
 RUNNER_IMAGE = "testforge-pytest-runner:py311-v2"
 MAX_LOG_BYTES = 64_000
+DEFAULT_MAX_SOURCE_BYTES = 256 * 1024
+DEFAULT_MAX_TEST_BYTES = 512 * 1024
 _IMAGE_BUILD_LOCK = Lock()
 
 
@@ -34,30 +36,111 @@ class ExecutionSandbox:
         memory_limit: str | None = None,
         nano_cpus: int | None = None,
         pids_limit: int | None = None,
+        max_source_bytes: int | None = None,
+        max_test_bytes: int | None = None,
         image: str = RUNNER_IMAGE,
     ) -> None:
-        self.timeout_seconds = timeout_seconds or int(
-            os.environ.get("TESTFORGE_DOCKER_TIMEOUT_SECONDS", "60")
+        self.timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else int(os.environ.get("TESTFORGE_DOCKER_TIMEOUT_SECONDS", "60"))
         )
-        self.memory_limit = memory_limit or os.environ.get(
-            "TESTFORGE_DOCKER_MEMORY_LIMIT", "512m"
+        self.memory_limit = (
+            memory_limit
+            if memory_limit is not None
+            else os.environ.get("TESTFORGE_DOCKER_MEMORY_LIMIT", "512m")
         )
-        self.nano_cpus = nano_cpus or int(
-            os.environ.get("TESTFORGE_DOCKER_NANO_CPUS", "1000000000")
+        self.nano_cpus = (
+            nano_cpus
+            if nano_cpus is not None
+            else int(os.environ.get("TESTFORGE_DOCKER_NANO_CPUS", "1000000000"))
         )
-        self.pids_limit = pids_limit or int(
-            os.environ.get("TESTFORGE_DOCKER_PIDS_LIMIT", "64")
+        self.pids_limit = (
+            pids_limit
+            if pids_limit is not None
+            else int(os.environ.get("TESTFORGE_DOCKER_PIDS_LIMIT", "64"))
+        )
+        self.max_source_bytes = (
+            max_source_bytes
+            if max_source_bytes is not None
+            else int(
+                os.environ.get(
+                    "TESTFORGE_MAX_SOURCE_BYTES", str(DEFAULT_MAX_SOURCE_BYTES)
+                )
+            )
+        )
+        self.max_test_bytes = (
+            max_test_bytes
+            if max_test_bytes is not None
+            else int(
+                os.environ.get("TESTFORGE_MAX_TEST_BYTES", str(DEFAULT_MAX_TEST_BYTES))
+            )
         )
         self.image = image
 
-        if self.timeout_seconds <= 0 or self.nano_cpus <= 0 or self.pids_limit <= 0:
-            raise ValueError("Docker timeout, CPU limit, and process limit must be positive.")
+        if (
+            self.timeout_seconds <= 0
+            or self.nano_cpus <= 0
+            or self.pids_limit <= 0
+            or self.max_source_bytes <= 0
+            or self.max_test_bytes <= 0
+            or not self.memory_limit.strip()
+        ):
+            raise ValueError(
+                "Docker resource limits and source/test byte limits must be positive."
+            )
 
     async def run_test_in_docker(
         self, test_code: str, route_code: str
     ) -> tuple[bool, str]:
         """Return (passed, logs); Docker unavailability is reported as an error."""
         started = time.monotonic()
+        if not isinstance(route_code, str) or not isinstance(test_code, str):
+            return False, self._encode_result(
+                "Sandbox inputs must be UTF-8 text.",
+                {
+                    "error_type": "sandbox_error",
+                    "duration_seconds": round(time.monotonic() - started, 3),
+                },
+            )
+        try:
+            source_size = len(route_code.encode("utf-8"))
+            test_size = len(test_code.encode("utf-8"))
+        except UnicodeEncodeError:
+            return False, self._encode_result(
+                "Sandbox inputs must be valid UTF-8 text.",
+                {
+                    "error_type": "sandbox_error",
+                    "duration_seconds": round(time.monotonic() - started, 3),
+                },
+            )
+
+        if source_size > self.max_source_bytes or test_size > self.max_test_bytes:
+            exceeded = []
+            if source_size > self.max_source_bytes:
+                exceeded.append(
+                    f"source is {source_size} bytes (limit {self.max_source_bytes})"
+                )
+            if test_size > self.max_test_bytes:
+                exceeded.append(
+                    f"generated tests are {test_size} bytes (limit {self.max_test_bytes})"
+                )
+            return False, self._encode_result(
+                "Sandbox input limit exceeded: " + "; ".join(exceeded) + ".",
+                {
+                    "error_type": "sandbox_error",
+                    "duration_seconds": round(time.monotonic() - started, 3),
+                    "diagnosis": {
+                        "category": "sandbox_error",
+                        "title": "Sandbox Input Too Large",
+                        "message": (
+                            "The submitted source or generated test suite exceeds "
+                            "the configured sandbox byte limit."
+                        ),
+                    },
+                },
+            )
+
         try:
             with tempfile.TemporaryDirectory(prefix="testforge-run-") as temp_dir:
                 workspace = Path(temp_dir)
@@ -73,9 +156,22 @@ class ExecutionSandbox:
                 os.chmod(test_path, 0o644)
 
                 loop = asyncio.get_running_loop()
-                return await loop.run_in_executor(
+                execution = loop.run_in_executor(
                     None, self._run_container_sync, temp_dir, started
                 )
+                try:
+                    return await asyncio.shield(execution)
+                except asyncio.CancelledError:
+                    # Keep the mounted workspace alive until the worker has
+                    # stopped and its container cleanup finally block has run.
+                    while not execution.done():
+                        try:
+                            await asyncio.shield(execution)
+                        except asyncio.CancelledError:
+                            continue
+                        except Exception:
+                            break
+                    raise
         except OSError as exc:
             return False, self._encode_result(
                 f"Sandbox workspace error: {exc}",
@@ -127,16 +223,25 @@ class ExecutionSandbox:
                 "cat /tmp/testforge-junit.xml; fi; "
                 "exit $pytest_exit",
             ]
-            container = client.containers.run(
+            # Separate creation from startup so a start failure still leaves
+            # us with a container handle that the finally block can remove.
+            container = client.containers.create(
                 self.image,
                 command=command,
                 working_dir="/workspace",
                 volumes={workspace: {"bind": "/workspace", "mode": "ro"}},
-                detach=True,
                 auto_remove=False,
                 network_disabled=True,
                 read_only=True,
                 user="65534:65534",
+                log_config=docker.types.LogConfig(
+                    type="local",
+                    config={
+                        "max-size": "4m",
+                        "max-file": "1",
+                        "compress": "false",
+                    },
+                ),
                 mem_limit=self.memory_limit,
                 nano_cpus=self.nano_cpus,
                 pids_limit=self.pids_limit,
@@ -148,9 +253,8 @@ class ExecutionSandbox:
                     "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
                     "TMPDIR": "/tmp",
                 },
-                stdout=True,
-                stderr=True,
             )
+            container.start()
 
             deadline = time.monotonic() + self.timeout_seconds
             timed_out = False

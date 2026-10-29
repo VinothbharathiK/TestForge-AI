@@ -1,0 +1,419 @@
+TESTFORGE AI — ANTIGRAVITY HANDOFF
+Inspection snapshot: 2026-10-29, immediately before the Milestone 4 handoff commit.
+
+1. PROJECT OVERVIEW
+
+TestForge AI is an autonomous API-testing engine. It asks an LLM to create a
+pytest suite for supplied FastAPI source, executes the suite in a disposable
+Docker runner, classifies the pytest evidence, and repairs eligible generated
+test-harness failures.
+
+Intended use: a portfolio project, system-design/interview demonstration, and
+potential hackathon submission. The current application is a demo-ready MVP,
+not a fully production-secure public service. The service has no user
+authentication or rate limiting. Docker reduces the exposure from executing
+untrusted code, but is not an absolute security boundary. Do not expose the
+service to arbitrary hostile public or multi-tenant workloads without stronger
+isolation and operational controls.
+
+2. TECHNOLOGY STACK AND REQUEST FLOW
+
+Frontend: React, Vite, Tailwind CSS, Axios, and lucide-react. Vite's development
+server is configured on port 3000; CORS also includes the common Vite port 5173.
+The browser API client in frontend/src/services/api.js posts source to
+http://localhost:8000/generate-tests and defines the two built-in API presets.
+
+Backend: Python, FastAPI, Pydantic, the OpenAI-compatible AsyncOpenAI SDK,
+python-dotenv, the Docker SDK, and pytest. The real model default is Meta Muse
+Spark 1.3 at https://api.meta.ai/v1.
+
+Request flow:
+1. frontend/src/App.jsx takes the selected or edited route source and calls
+   generateAndTestApi() in frontend/src/services/api.js.
+2. backend/main.py validates CodePayload and calls
+   TestForgeAgent.generate_and_heal() in backend/agent.py.
+3. The agent requests a pytest suite from the configured model, validates its
+   syntax and shape, and calls ExecutionSandbox.run_test_in_docker().
+4. backend/sandbox.py writes main.py and test_app.py in a temporary workspace,
+   executes pytest in the isolated runner, captures output, exit code, and
+   JUnit counts, then classifies the result from pytest evidence.
+5. The agent stops on confirmed API defects, initialization/collection errors,
+   and infrastructure errors. It may repair test setup/harness failures up to
+   MAX_REPAIR_ATTEMPTS (3); it does not remove meaningful API assertions to
+   force a defective application to pass.
+6. backend/main.py returns the result. Infrastructure/configuration status
+   "error" uses HTTP 503; completed pass, failure, and defect analyses are result
+   payloads. frontend/src/utils/resultPresentation.js independently requires
+   real passing metrics before rendering a verified pass and requires executed
+   assertion evidence before rendering a confirmed defect. App.jsx passes the
+   result to AgentLogs.jsx and TestViewer.jsx.
+
+Important functions and modules:
+- backend/main.py: configured_cors_origins(), CodePayload, generate_tests().
+- backend/agent.py: TestForgeAgent.__init__(), generate_and_heal(),
+  _classify_execution_failure(), _repair_prompt(), _validate_pytest(),
+  _parse_sandbox_result(), _result(), and aclose().
+- backend/sandbox.py: ExecutionSandbox.run_test_in_docker(),
+  _run_container_sync(), _classify_pytest_result(), _parse_junit_counts(), and
+  _ensure_runner_image().
+- frontend/src/utils/resultPresentation.js: isVerifiedPass(),
+  isConfirmedDefect(), summarizeResult(), and splitLogEntries().
+
+3. COMPLETED MILESTONES
+
+Milestone 1 — The React/Vite frontend and FastAPI request path were scaffolded
+and made usable. The interface, presets, editor, result presentation, and
+backend flow were developed into the current real Meta/Docker implementation.
+The initial Git feature commit was f0d5e7a; the working-state checkpoint was
+3a61dd6.
+
+Milestone 2 — Evidence-based pytest classification was implemented and
+committed as 6af01fe ("Fix evidence-based pytest failure classification").
+Passing assertions, genuine assertion failures, application initialization
+errors, test collection errors, fixture/setup errors, sandbox errors, zero
+tests, all-skipped suites, and inconclusive execution errors have distinct
+outcomes. Tests and live scenarios were reported as verified.
+
+Milestone 3 — The live self-healing flow and repair diagnostics were committed
+as dc8cb65 ("Verify live self-healing and repair diagnostics"). A real Meta
+generation created tests; an intentionally injected missing fixture caused a
+real Docker/pytest setup failure; Meta made a real repair request; Docker ran
+the repaired tests successfully; and the original meaningful assertions were
+preserved. Genuine API defects and application initialization failures were
+not automatically repaired.
+
+Milestone 4 — Production-hardening and Windows setup/documentation changes are
+in the worktree at this inspection snapshot and are included in the requested
+handoff commit. The sandbox has resource and input limits, minimal runner
+environment, cleanup on normal completion/errors/timeouts/cancellation, and a
+startup-failure cleanup regression test. CORS is explicit, examples contain
+placeholders, and backend/frontend setup plus live demo steps are documented.
+The opt-in release verification tool is backend/release_verify.py. The latest
+reported verification evidence is recorded in section 4; these changes have
+not yet received a Milestone 4 commit at the snapshot above.
+
+4. LATEST REPORTED VERIFICATION RESULTS
+
+The following are the latest results reported before writing this handoff;
+they were not rerun solely to author this document. A new checkout should run
+the automated checks again. During handoff preparation, git diff --check was
+rerun and passed; Git printed line-ending normalization warnings only.
+
+- Backend suite: 38 passed.
+- Frontend tests: 10 passed.
+- Frontend production build: succeeded. Vite emitted a non-blocking warning
+  that vite.config.ts uses __dirname with configLoader: 'native'.
+- Python compilation: passed.
+- Git whitespace check: passed (LF-to-CRLF conversion warnings were reported
+  by Git for modified files).
+- Real Docker smoke: one test collected and passed, pytest exit code 0.
+- Auth Route (Clean): real model generation and pytest; 8 collected, 8 passed,
+  no failures/errors, exit code 0.
+- Checkout (Defect): real generated tests; 10 collected, 5 passed and 5
+  assertion failures, no errors, exit code 1; classified as assertion_failure
+  and defect_detected after model review.
+- Invalid UserRegister: classified application_error; pytest exit code 2, zero
+  collected, zero failed assertions, one error; no endpoint assertions ran and
+  no API defect was reported.
+- Live self-healing: real initial generation and repair request; one repair
+  attempt out of a maximum of three. The initial Docker run had a deliberately
+  injected missing-fixture setup error (11 collected, 10 passed, one error,
+  exit 1); the rerun passed all 10 tests (exit 0). Original assertions were
+  preserved.
+- After those reported checks, no TestForge runner containers or temporary
+  verification workspaces remained.
+
+5. IMPORTANT CONFIGURATION
+
+- Model API base URL default: https://api.meta.ai/v1.
+- Requested model default: muse-spark-1.3.
+- Credential precedence: MODEL_API_KEY first; META_API_KEY is a backward-
+  compatible fallback.
+- backend/agent.py loads backend/.env with python-dotenv using override=False;
+  values already supplied by the process environment take precedence. If
+  python-dotenv cannot be imported, process environment variables still work.
+- Base URL variables: META_API_BASE_URL, then compatibility alias
+  META_BASE_URL, then the default. Model: META_MODEL. Timeout:
+  META_API_TIMEOUT_SECONDS (default 60 seconds).
+- Docker settings: TESTFORGE_DOCKER_TIMEOUT_SECONDS (60),
+  TESTFORGE_DOCKER_MEMORY_LIMIT (512m), TESTFORGE_DOCKER_NANO_CPUS
+  (1000000000), TESTFORGE_DOCKER_PIDS_LIMIT (64).
+- Input limits: TESTFORGE_MAX_SOURCE_BYTES (262144) and
+  TESTFORGE_MAX_TEST_BYTES (524288).
+- Browser origins: TESTFORGE_CORS_ORIGINS; defaults are localhost and
+  127.0.0.1 on ports 3000 and 5173. Wildcard origins are rejected and browser
+  credentials are disabled.
+- Store a real key only in the ignored local backend/.env or the process
+  environment. Never commit, print, paste into the frontend, or pass it into
+  the runner container. backend/.env.example and frontend/.env.example contain
+  placeholders/documentation only; verify them before adding new settings.
+
+6. DOCKER AND SECURITY
+
+The implemented runner configuration is in backend/sandbox.py:
+- Submitted app source and generated tests execute only in Docker; no host
+  execution fallback exists.
+- The runner gets one read-only bind mount for the temporary workspace at
+  /workspace. The Docker socket and unrelated host filesystem paths are not
+  mounted. The container root filesystem is read-only.
+- Network is disabled. The container runs as UID/GID 65534, drops all Linux
+  capabilities, and sets no-new-privileges.
+- Writable /tmp is a 64 MiB tmpfs configured noexec,nosuid,nodev.
+- Defaults limit execution to 60 seconds, 512 MiB memory, one CPU quota, 64
+  processes, and a Docker local log cap of 4 MiB. Returned pytest output is
+  additionally limited to the last 64 KiB.
+- Submitted source and generated test UTF-8 sizes are limited to 256 KiB and
+  512 KiB. Only a minimal explicit environment is sent to the container:
+  PYTHONDONTWRITEBYTECODE, PYTEST_DISABLE_PLUGIN_AUTOLOAD, and TMPDIR.
+- The trusted runner image is built from python:3.11-slim and installs pytest,
+  FastAPI, pydantic, httpx2, and email-validator. Initial image pull/build and
+  package installation need Docker host network access; pytest containers do
+  not have network access.
+- TemporaryDirectory owns each workspace. The container is created before it
+  is started so a startup exception still leaves a handle for finally cleanup.
+  Normal execution, timeouts, Docker errors, and executor cancellation have
+  cleanup paths; cancellation waits for the executor worker before deleting
+  its mounted workspace. Unit tests cover the configuration and cleanup paths.
+
+These are defense-in-depth controls, not proof that Docker is invulnerable.
+Docker Desktop, the daemon, kernel, or host can be misconfigured or vulnerable.
+The service currently lacks authentication, rate limiting, abuse monitoring,
+and multi-tenant isolation. Do not expose it to arbitrary hostile users as a
+public execution service. Avoid submitting source that embeds secrets: pytest
+tracebacks can include submitted source lines, and result logs are shown in
+the UI.
+
+7. PROJECT DIRECTORY AND IMPORTANT FILES
+
+Repository files relevant to the application:
+
+TestForge-AI/
+|-- .gitignore
+|-- README.md
+|-- ANTIGRAVITY_HANDOFF.txt
+|-- PROJECT_PROGRESS.txt                 (existing untracked file; preserve)
+|-- backend/
+|   |-- .env.example
+|   |-- agent.py
+|   |-- main.py
+|   |-- release_verify.py
+|   |-- requirements.txt
+|   |-- sandbox.py
+|   `-- tests/
+|       |-- test_agent.py
+|       |-- test_main.py
+|       `-- test_sandbox.py
+`-- frontend/
+    |-- .env.example
+    |-- README.md
+    |-- package.json / package-lock.json / bun.lock
+    |-- vite.config.ts / tsconfig.json
+    `-- src/
+        |-- App.jsx
+        |-- main.tsx
+        |-- index.css
+        |-- services/api.js
+        |-- components/AgentLogs.jsx
+        |-- components/CodeInput.jsx
+        |-- components/TestViewer.jsx
+        `-- utils/
+            |-- resultPresentation.js / resultPresentation.test.js
+            `-- testForgeEngine.js / testForgeEngine.test.ts
+
+backend/requirements.txt pins Python dependencies. frontend/package-lock.json
+is used by npm ci. The frontend README points to the root README for full setup.
+The root .gitignore excludes .env files, Python virtual environments/caches,
+and pytest artifacts; frontend/.gitignore excludes node_modules, build output,
+and local frontend .env files. Keep PROJECT_PROGRESS.txt untouched unless the
+user asks to update it.
+
+Git history identifies these completed-milestone files:
+- Milestone 2 commit 6af01fe: backend/agent.py, backend/sandbox.py,
+  backend/tests/test_agent.py, backend/tests/test_sandbox.py,
+  frontend/src/utils/resultPresentation.js, and its test.
+- Milestone 3 commit dc8cb65: backend/agent.py and backend/tests/test_agent.py.
+- Milestone 4 changes at the inspection snapshot: backend/.env.example,
+  backend/agent.py, backend/main.py, backend/requirements.txt,
+  backend/sandbox.py, all three backend tests, frontend/.env.example,
+  frontend/README.md, root README.md, and backend/release_verify.py. The prior
+  frontend source typography/layout edits and PROJECT_PROGRESS.txt are
+  unrelated and must not be included in the Milestone 4 commit.
+
+8. WINDOWS SETUP AND COMMANDS
+
+Fresh setup from PowerShell at the repository root (Python 3.11+; Python 3.13
+was used for the reported backend checks; Docker runner uses Python 3.11):
+
+    py -3.11 -m venv backend\.venv
+    .\backend\.venv\Scripts\python.exe -m pip install --upgrade pip
+    .\backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+    if (-not (Test-Path backend\.env)) { Copy-Item backend\.env.example backend\.env }
+    notepad backend\.env
+
+Fill the blank MODEL_API_KEY (preferred) or META_API_KEY with a valid key in
+the local ignored file; do not echo the value. Node 22.12+ is the documented
+recommendation for Vite 8.3.5 (Node 24 was used for reported frontend checks).
+Vite itself accepts Node 20.19+ or 22.12+. Install Node and Docker Desktop with
+Linux containers, then check Docker Desktop/WSL and the daemon:
+
+    node --version
+    npm --version
+    wsl --version
+    docker version
+
+Backend startup from the backend directory, as requested for this checkout:
+
+    Set-Location backend
+    .\venv\Scripts\python.exe -m uvicorn main:app --reload
+
+This checkout currently has an ignored backend/venv environment. A fresh
+setup above creates backend/.venv instead; for that environment from backend/,
+use:
+
+    .\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+
+The root README also gives the root-directory equivalent:
+
+    .\backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+Start the frontend in another PowerShell terminal:
+
+    Set-Location frontend
+    npm ci
+    npm run dev
+
+The dev server uses port 3000 and binds 0.0.0.0. The browser calls
+http://localhost:8000/generate-tests. For backend checks from the repository
+root:
+
+    .\backend\.venv\Scripts\python.exe -m pytest backend\tests -q
+    .\backend\.venv\Scripts\python.exe -m py_compile backend\agent.py backend\sandbox.py backend\main.py backend\release_verify.py
+
+For frontend checks:
+
+    Set-Location frontend
+    npm test
+    npm run build
+
+The package's npm test script runs node:test for
+src/utils/resultPresentation.test.js. A separate testForgeEngine.test.ts file
+exists; do not claim npm test ran that file unless the script is updated and
+the result is verified.
+
+The live release tool must be invoked from the repository root; its --live
+flag is required because it makes real, quota-consuming model requests and
+runs Docker tests:
+
+    .\backend\.venv\Scripts\python.exe -m backend.release_verify --live auth-clean
+    .\backend\.venv\Scripts\python.exe -m backend.release_verify --live checkout-defect
+    .\backend\.venv\Scripts\python.exe -m backend.release_verify --live invalid-user-register
+    .\backend\.venv\Scripts\python.exe -m backend.release_verify --live self-heal
+    .\backend\.venv\Scripts\python.exe -m backend.release_verify --live all
+
+PowerShell activation may be blocked by the execution policy. Direct calls to
+the virtual-environment Python executable avoid activation. If activation is
+needed, use the process-only policy shown in README.md; do not change the
+machine-wide policy for this project. Docker unavailable, image pull/build
+failure, missing credentials, invalid model access, provider 401/403/429, and
+network/timeouts are distinct troubleshooting cases documented in README.md.
+
+9. DEMO SCENARIOS
+
+Use the UI presets for the first three cases, select Generate, and inspect the
+compact result summary plus Agent Logs, Generated Suite, and expandable raw
+technical output:
+
+1. Auth Route (Clean), preset "User Auth & Profile (Clean)": expect status
+   success only after actual pytest collection and passing assertions. Check a
+   positive collected/passed count, zero failures/errors, pytest exit 0, and
+   the requested/returned model events.
+2. Checkout (Defect), preset "Payment Checkout (Defect Detected)": the
+   discount-factor defect should produce executed assertion failures and exit
+   1. Defect classification is only valid with assertion evidence; the result
+   should have failure_type assertion_failure and a Meta API_DEFECT review.
+3. Invalid UserRegister: edit the clean source so UserRegister does not inherit
+   BaseModel. Expect Application Initialization Error/application_error,
+   FastAPIError, pytest exit 2, zero collected endpoint tests, zero failed
+   assertions, one collection error, and no defect flag.
+4. Self-healing: run the explicit live self-heal release check. It adds a
+   missing fixture to a temporary copy after genuine model generation, expects
+   a real test_setup_error and failing pytest exit, sends the failure through
+   the normal Meta repair loop, then reruns the repaired suite in Docker. The
+   report shows the real generation/repair model events, retry count, both
+   pytest summaries, assertion-preservation check, and temporary-workspace
+   cleanup. The source preset is not changed.
+
+Normal backend/frontend tests use fakes and local deterministic checks; they
+do not require Meta credentials, provider network access, or a Docker daemon.
+The release verification command is separate and requires all three: live
+credentials, network access to the configured provider, and Docker.
+
+10. GIT WORKFLOW AND INSPECTION SNAPSHOT
+
+Use the existing branch only (currently master) and preserve the linear
+history. Make one reviewed commit per completed milestone. Do not push unless
+the user explicitly asks. Do not run destructive reset/revert operations or
+discard user changes. Inspect git status before editing or committing. Never
+commit .env files, credentials, virtual environments, node_modules, caches,
+or generated build output.
+
+At the inspection snapshot immediately before this handoff commit:
+- Branch: master.
+- Latest existing commit: dc8cb65a1a5a17bcc153ce1fa8cef80d4d63b78c —
+  "Verify live self-healing and repair diagnostics".
+- Milestone 4 was not yet committed; its backend hardening, tests, examples,
+  README changes, and release tool were uncommitted and are intended for the
+  requested Milestone 4 handoff commit.
+- Existing modified frontend layout/typography files were
+  frontend/src/App.jsx, frontend/src/components/AgentLogs.jsx,
+  frontend/src/components/CodeInput.jsx,
+  frontend/src/components/TestViewer.jsx, and frontend/src/index.css. They are
+  outside the Milestone 4 commit and must remain untouched.
+- PROJECT_PROGRESS.txt was untracked and must remain outside the commit and
+  must not be overwritten.
+- The M4/handoff commit is not included in this snapshot hash; read git log
+  after handoff to obtain the new latest commit.
+
+The .env examples are safe placeholders. No real .env file, credential, key,
+virtual environment, node_modules, or generated build output is intended for
+the commit. Recheck the staged file list and git diff --cached --check before
+any future commit.
+
+11. KNOWN WARNINGS, LIMITATIONS, AND OUTSTANDING WORK
+
+- The last reported frontend build succeeded with a non-blocking warning in
+  frontend/vite.config.ts: __dirname is unsupported by the current native
+  config loader and Vite plans to make that loader the default in a future
+  major version.
+- Git may warn that LF working files will be normalized to CRLF when touched.
+  The reported and handoff-time git diff --check runs passed; the line-ending
+  warnings were not whitespace errors.
+- Docker containers are defense in depth, not VM/microVM isolation. The app is
+  unauthenticated and has no rate limits/abuse controls; public hostile
+  multi-tenant execution needs more work before deployment.
+- Test containers have no network. Suites that need external services cannot
+  verify those dependencies. The trusted runner image build may need outbound
+  access for base-image and package installation.
+- Avoid secrets in submitted code because pytest output can include source
+  excerpts. Meta credentials themselves are read by the backend and are not
+  passed into the runner environment.
+- No incomplete Milestone 4 requirement was identified in the recorded work.
+  Any new checkout should rerun backend tests, frontend tests/build, Python
+  compilation, and any desired live scenario; live calls consume model quota.
+
+12. INSTRUCTIONS FOR ANTIGRAVITY
+
+1. Read ANTIGRAVITY_HANDOFF.txt and README.md first.
+2. Inspect git status before doing any work. Preserve all existing changes,
+   especially frontend typography/layout work and PROJECT_PROGRESS.txt.
+3. Continue the existing implementation; do not start over or repeat completed
+   milestone audits without a concrete reason.
+4. Resume at the actual outstanding task shown by the repository and current
+   verification state. Make small, targeted changes and run relevant tests.
+5. Keep live Meta/Docker checks opt-in and truthful. Never replace a live
+   result with a mock or claim a check that was not run.
+6. Do not create branches, discard changes, or commit unless the user requests
+   it. Do not push unless explicitly requested.
+7. Explain technical changes briefly and clearly so the project owner can
+   learn while building. Ask only when an essential choice cannot be safely
+   inferred.

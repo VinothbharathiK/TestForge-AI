@@ -1,6 +1,31 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from backend import main
+
+
+def test_cors_defaults_are_explicit_local_origins(monkeypatch):
+    monkeypatch.delenv("TESTFORGE_CORS_ORIGINS", raising=False)
+
+    assert main.configured_cors_origins() == [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+
+def test_cors_configuration_rejects_wildcard_and_applies_explicit_origins():
+    with pytest.raises(ValueError, match="explicit origins"):
+        main.configured_cors_origins("https://frontend.example,*")
+
+    middleware = next(
+        item for item in main.app.user_middleware if item.cls.__name__ == "CORSMiddleware"
+    )
+    assert middleware.kwargs["allow_origins"] == main.CORS_ORIGINS
+    assert middleware.kwargs["allow_credentials"] is False
+    assert middleware.kwargs["allow_methods"] == ["POST"]
+    assert middleware.kwargs["allow_headers"] == ["content-type"]
 
 
 class FakeAgent:

@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,14 +11,34 @@ except ImportError:  # Support `uvicorn main:app` from inside backend/.
     from agent import TestForgeAgent
 
 
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
+
+
+def configured_cors_origins(value: str | None = None) -> list[str]:
+    """Read explicit browser origins and reject wildcard policy."""
+    configured = os.environ.get("TESTFORGE_CORS_ORIGINS") if value is None else value
+    if configured is None:
+        return list(DEFAULT_CORS_ORIGINS)
+    origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+    if "*" in origins:
+        raise ValueError("TESTFORGE_CORS_ORIGINS must list explicit origins, not '*'.")
+    return origins
+
+
+CORS_ORIGINS = configured_cors_origins()
 app = FastAPI(title="TestForge AI API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["POST"],
+    allow_headers=["content-type"],
 )
 
 
