@@ -145,14 +145,16 @@ temporary copy, passes that failure through the existing repair loop, checks
 that the original assertions remain in the repaired suite, and removes the
 verification files. No production source or preset is edited.
 
-### Phase 5 API evaluation benchmark
+### API evaluation benchmark (Phase 5 & 6)
 
-`backend.eval_phase5` provides a 5-scenario evaluation benchmark to measure agent performance across realistic FastAPI application patterns:
+`backend.eval_phase5` provides an evaluation benchmark to measure agent performance across realistic FastAPI application patterns:
 1. `multi-endpoint`: Clean product catalogue CRUD API (verifies multi-route test synthesis).
 2. `inventory-defect`: Pricing API with deliberate arithmetic calculation bug (verifies executed assertion failures and `API_DEFECT` classification without false repairs).
 3. `pagination-validation`: Item search with 1-based pagination, page size bounds, category filtering, and 404s (verifies input validation and edge cases).
 4. `repair-import`: Ground-truth clean API with a temporary injected missing fixture (verifies bounded self-healing and assertion preservation).
 5. `broken-init`: Missing `BaseModel` inheritance (verifies FastAPI initialization error handling without false defect claims).
+6. `pagination-boundary-defect`: Articles pagination with slice boundary calculation off-by-one (`start = page * size`).
+7. `input-validation-defect`: Order placement accepting invalid non-positive `quantity <= 0` instead of rejecting with HTTP 400 Bad Request.
 
 Run the deterministic evaluation unit tests (no credentials, network, or Docker required):
 
@@ -168,9 +170,19 @@ To run an individual live scenario (requires Meta API credentials, network acces
 .\backend\.venv\Scripts\python.exe -m backend.eval_phase5 pagination-validation --live
 .\backend\.venv\Scripts\python.exe -m backend.eval_phase5 repair-import --live
 .\backend\.venv\Scripts\python.exe -m backend.eval_phase5 broken-init --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 pagination-boundary-defect --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 input-validation-defect --live
 ```
 
 Reports are written to `backend/eval_reports/` as both JSON and Markdown summaries. An aggregate verified summary is maintained in `backend/eval_reports/PHASE5_LIVE_SUMMARY.md`.
+
+Verified benchmark metrics (7 scenarios):
+- **Overall expected-outcome match:** 7/7 (100%).
+- **API outcome classification accuracy:** 5/5 (100%) across applicable endpoint executions (2/2 clean API outcomes and 3/3 known defect outcomes).
+- **Known-defect detection rate:** 3/3 (100%) intentional bugs correctly detected from executed assertions and classified as defects without false repairs.
+- **False-positive count:** 0/2 (0%) clean APIs incorrectly flagged as defective.
+- **Repair success:** 1/1 (100%) eligible test-harness failure repaired with 67/67 (100%) baseline assertions preserved.
+- *Notice:* This targeted benchmark verifies core classification, bounded self-healing, and assertion preservation under controlled conditions; it is not a general accuracy guarantee across arbitrary public APIs.
 
 ## Hackathon demo
 

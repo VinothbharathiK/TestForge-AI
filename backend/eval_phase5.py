@@ -13,6 +13,9 @@ Usage (from repository root):
     .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live inventory-defect
     .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live pagination-validation
     .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live repair-import
+    .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live broken-init
+    .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live pagination-boundary-defect
+    .\\backend\\venv\\Scripts\\python.exe -m backend.eval_phase5 --live input-validation-defect
 
 Reports are written to backend/eval_reports/.
 """
@@ -214,6 +217,90 @@ def create_order(order: Order):
     return {"item_id": order.item_id, "quantity": order.quantity, "status": "created"}
 '''.strip()
 
+# Scenario 6: Pagination boundary defect.
+# Contract:
+# - 1-based page numbering starting at 1. Page 1 returns the first slice of items.
+# - Invalid page numbers (< 1) must be rejected with HTTP 422.
+# - Page size must be between 1 and 50; size > 50 must be rejected with HTTP 422.
+# - Page 5 with size 5 returns the last 5 items (ids 21 to 25).
+# Bug: calculates `start = page * size` instead of `(page - 1) * size`.
+# For page=1 with size=5, returns articles 6..10 instead of 1..5.
+# For last page (page=5), returns empty slice [] instead of 21..25.
+# Expected: defect_detected, failure_type=assertion_failure, exit 1, 0 repairs.
+PAGINATION_BOUNDARY_DEFECT_SOURCE = '''
+from fastapi import FastAPI, HTTPException, Query
+from typing import Optional
+
+app = FastAPI(title="Articles Pagination API")
+
+_articles = [{"id": i, "title": f"Article {i}"} for i in range(1, 26)]
+
+
+@app.get("/articles")
+def list_articles(
+    page: int = Query(1, ge=1, description="1-based page number. Page 1 is the first page."),
+    size: int = Query(5, ge=1, le=50, description="Items per page. Must be between 1 and 50."),
+):
+    """Return a paginated list of articles.
+    Contract:
+    - Page numbering starts at 1. Page 1 returns the first slice of items (ids 1 to 5).
+    - Invalid page numbers (< 1) must be rejected with HTTP 422.
+    - Page size must be between 1 and 50; size > 50 must be rejected with HTTP 422.
+    - For page 5 with size 5, returns the last 5 items (ids 21 to 25).
+    """
+    # BUG: off-by-one in slice boundary calculation: calculates start as page * size
+    # instead of (page - 1) * size. For page=1 with size=5, returns items[5:10] (ids 6-10) instead of items[0:5].
+    start = page * size
+    end = start + size
+    return {
+        "page": page,
+        "size": size,
+        "total": len(_articles),
+        "items": _articles[start:end],
+    }
+'''.strip()
+
+# Scenario 7: Input validation defect.
+# Contract:
+# - quantity must be strictly greater than 0. If quantity <= 0, return HTTP 400 Bad Request.
+# - unit_price must be non-negative.
+# - Returns total_price = quantity * unit_price with status 201 Created.
+# Bug: missing validation for quantity <= 0.
+# Accepts quantity=0 or negative quantities and returns 201 Created instead of 400 Bad Request.
+# Expected: defect_detected, failure_type=assertion_failure, exit 1, 0 repairs.
+INPUT_VALIDATION_DEFECT_SOURCE = '''
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel
+
+app = FastAPI(title="Order Placement API")
+
+
+class OrderItem(BaseModel):
+    product_id: int
+    quantity: int
+    unit_price: float
+
+
+@app.post("/orders", status_code=status.HTTP_201_CREATED)
+def place_order(item: OrderItem):
+    """Place an order for a product.
+    Contract:
+    - quantity must be strictly greater than 0. If quantity <= 0, return HTTP 400 Bad Request.
+    - unit_price must be non-negative.
+    - Returns total_price = quantity * unit_price.
+    """
+    # BUG: missing validation check for quantity <= 0.
+    # The endpoint accepts quantity=0 or negative quantities and returns 201 Created instead of 400.
+    total = round(item.quantity * item.unit_price, 2)
+    return {
+        "product_id": item.product_id,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "total_price": total,
+        "status": "confirmed",
+    }
+'''.strip()
+
 
 # ---------------------------------------------------------------------------
 # Scenario registry
@@ -274,6 +361,32 @@ SCENARIO_META: dict[str, dict[str, Any]] = {
             "Expect: status=failed, failure_type=application_error, exit 2, 0 collected."
         ),
         "known_bug": "Order class missing BaseModel inheritance",
+    },
+    "pagination-boundary-defect": {
+        "source": PAGINATION_BOUNDARY_DEFECT_SOURCE,
+        "kind": "defect",
+        "description": (
+            "Articles API where page query parameter has an off-by-one slice calculation "
+            "bug: uses page * size instead of (page - 1) * size. "
+            "Expect: status=defect_detected, failure_type=assertion_failure, exit 1."
+        ),
+        "known_bug": (
+            "list_articles calculates slice start as page * size instead of (page - 1) * size, "
+            "skipping page 1 items and returning empty slice on the last page"
+        ),
+    },
+    "input-validation-defect": {
+        "source": INPUT_VALIDATION_DEFECT_SOURCE,
+        "kind": "defect",
+        "description": (
+            "Order Placement API where /orders accepts quantity <= 0 instead of returning "
+            "HTTP 400 Bad Request as required by contract. "
+            "Expect: status=defect_detected, failure_type=assertion_failure, exit 1."
+        ),
+        "known_bug": (
+            "place_order accepts non-positive quantities (quantity <= 0) and returns 201 "
+            "instead of returning 400 Bad Request"
+        ),
     },
 }
 
@@ -526,11 +639,21 @@ def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(results)
     matched = sum(1 for r in results if r.get("expected_outcome_matched"))
 
-    # Defect classification: scenarios where kind is "defect" or "clean" (non-app-error)
-    # Denominator: scenarios where kind ∈ {clean, defect} (actual pytest ran).
-    # application_error and repair scenarios test different capabilities.
+    # Clean scenarios
+    clean_scenarios = [r for r in results if r["kind"] == "clean"]
+    clean_correct = sum(1 for r in clean_scenarios if r.get("expected_outcome_matched"))
+    false_positives = sum(
+        1 for r in clean_scenarios
+        if r.get("status") == "defect_detected" or r.get("failure_type") == "assertion_failure"
+    )
+
+    # Defect scenarios
+    defect_scenarios = [r for r in results if r["kind"] == "defect"]
+    defect_detected = sum(1 for r in defect_scenarios if r.get("expected_outcome_matched"))
+
+    # Applicable endpoint-execution scenarios (clean + defect)
     classifiable = [r for r in results if r["kind"] in ("clean", "defect")]
-    defect_correct = sum(1 for r in classifiable if r.get("expected_outcome_matched"))
+    classification_correct = sum(1 for r in classifiable if r.get("expected_outcome_matched"))
 
     # Repair: scenarios of kind "repair"
     repair_scenarios = [r for r in results if r["kind"] == "repair"]
@@ -558,7 +681,12 @@ def _aggregate(results: list[dict[str, Any]]) -> dict[str, Any]:
         "total_scenarios": total,
         "expected_outcome_matched": matched,
         "overall_success_rate": f"{matched}/{total}",
-        "defect_classification_correct": f"{defect_correct}/{len(classifiable)}",
+        "overall_outcome_match": f"{matched}/{total}",
+        "api_classification_accuracy": f"{classification_correct}/{len(classifiable)}",
+        "defect_classification_correct": f"{classification_correct}/{len(classifiable)}",
+        "clean_outcome_accuracy": f"{clean_correct}/{len(clean_scenarios)}",
+        "known_defect_detection_rate": f"{defect_detected}/{len(defect_scenarios)}",
+        "false_positive_count": f"{false_positives}/{len(clean_scenarios)}",
         "repair_success_rate": f"{repair_success}/{len(repair_scenarios)}",
         "assertion_preservation_rate": (
             f"{preservation_ok}/{len(repair_attempted)}"
@@ -582,14 +710,16 @@ def _markdown_report(
     lines.append("**Label:** Live evaluation — real Meta API and Docker sandbox.\n")
 
     lines.append("## Aggregate Results\n")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"|---|---|")
-    lines.append(f"| Overall scenario success | `{agg['overall_success_rate']}` |")
-    lines.append(f"| Defect/clean classification | `{agg['defect_classification_correct']}` |")
-    lines.append(f"| Repair success | `{agg['repair_success_rate']}` |")
-    lines.append(f"| Assertion preservation | `{agg['assertion_preservation_rate']}` |")
-    lines.append(f"| Total model calls | `{agg['total_model_calls']}` |")
-    lines.append(f"| Total wall time | `{agg['total_wall_time_ms']} ms` |")
+    lines.append(f"| Metric | Value | Scope / Definition |")
+    lines.append(f"|---|---|---|")
+    lines.append(f"| Overall expected-outcome match | `{agg['overall_outcome_match']}` | All evaluated scenarios matching ground-truth expectation |")
+    lines.append(f"| API outcome classification accuracy | `{agg['api_classification_accuracy']}` | Applicable endpoint runs ({agg['clean_outcome_accuracy']} clean + {agg['known_defect_detection_rate']} defect) |")
+    lines.append(f"| Known-defect detection rate | `{agg['known_defect_detection_rate']}` | Intentional API defects correctly detected |")
+    lines.append(f"| False-positive count | `{agg['false_positive_count']}` | Clean API scenarios incorrectly flagged as defects |")
+    lines.append(f"| Repair success | `{agg['repair_success_rate']}` | Eligible test-side harness failures repaired |")
+    lines.append(f"| Assertion preservation | `{agg['assertion_preservation_rate']}` | Baseline assertions preserved after repair |")
+    lines.append(f"| Total model calls | `{agg['total_model_calls']}` | Total LLM API completions requested |")
+    lines.append(f"| Total wall time | `{agg['total_wall_time_ms']} ms` | Cumulative duration across runs |")
 
     lines.append("\n## Scenario Details\n")
     for r in results:
@@ -663,8 +793,13 @@ def _markdown_report(
 
     lines.append("## Notes\n")
     lines.append(
-        "- Defect classification denominator: scenarios of kind `clean` or `defect` only "
-        "(excludes `app_error` and `repair` which test different capabilities).\n"
+        "- Small benchmark notice: This is a targeted synthetic benchmark to verify agent "
+        "classification, bounded self-healing, and assertion preservation under controlled "
+        "conditions. It does not establish general accuracy across arbitrary or multi-service APIs.\n"
+        "- API outcome classification denominator: scenarios of kind `clean` or `defect` only "
+        "(excludes `app_error` which tests initialization recovery, and `repair` which tests harness recovery).\n"
+        "- Known-defect detection rate: counts executed assertion failures correctly recognized as API defects.\n"
+        "- False-positive count: counts clean API scenarios incorrectly flagged as defects.\n"
         "- Repair success denominator: scenarios of kind `repair` only.\n"
         "- Assertion preservation denominator: repair scenarios where at least one repair "
         "attempt was made.\n"

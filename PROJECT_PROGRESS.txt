@@ -204,3 +204,36 @@ Verified live evaluation results (2026-10-29):
 Deterministic verification results:
 - Backend unit suite: 58 passed (pytest, Python 3.13.14).
 - Python compilation: all backend modules and tests passed.
+
+---
+
+COMPLETED: PHASE 6 — BENCHMARK EXPANSION FOR NEW DEFECT CATEGORIES
+Date: 29 October 2026
+
+Phase 6 expanded the evaluation benchmark to test pagination boundary bugs and input validation range defects:
+
+What was added:
+- Scenario 6: pagination-boundary-defect (Articles API with slice calculation off-by-one: start = page * size).
+  Verified live: 13 collected, 6 passed, 7 failed, pytest exit 1, classified as API_DEFECT, 0 repairs.
+- Scenario 7: input-validation-defect (Order placement accepting invalid non-positive quantity <= 0).
+  Verified live: 7 collected, 4 passed, 3 failed, pytest exit 1, classified as API_DEFECT, 0 repairs.
+- Added 6 deterministic unit tests in backend/tests/test_eval_phase5.py covering metadata, scenario definitions,
+  and failure classification evaluation rules.
+- Updated backend/eval_reports/PHASE5_LIVE_SUMMARY.md and README.md.
+
+Verified cumulative evaluation results across all 7 scenarios (2026-10-29):
+- Overall expected-outcome match: 7/7 (100%) across all 7 benchmark scenarios.
+- API outcome classification accuracy: 5/5 (100%) across applicable endpoint-execution scenarios,
+  comprising 2/2 clean API outcomes and 3/3 known defect outcomes.
+- Known-defect detection rate: 3/3 (100%) intentional defects detected (inventory, boundary, validation).
+- False-positive count: 0/2 (0%) clean API scenarios incorrectly flagged as defects.
+- Repair success rate: 1/1 (100%) on eligible test-harness failures, with 67/67 baseline assertions preserved.
+- Model calls: 11 calls across 7 scenarios (7 generation, 3 classification, 1 repair).
+- Cumulative wall time: ~179.8s (~3.0 minutes total).
+- Token usage: Not exposed by provider response object (truthfully omitted).
+- Scope notice: This is a targeted synthetic benchmark demonstrating classification and bounded repair
+  under controlled conditions, not a statistical guarantee across arbitrary public APIs.
+
+Deterministic verification results:
+- Backend unit suite: 64 passed (pytest, Python 3.13.14).
+- Python compilation: all backend modules and tests passed.

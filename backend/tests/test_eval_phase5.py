@@ -309,7 +309,11 @@ def test_aggregate_all_pass():
     ]
     agg = _aggregate(results)
     assert agg["overall_success_rate"] == "4/4"
+    assert agg["overall_outcome_match"] == "4/4"
+    assert agg["api_classification_accuracy"] == "2/2"
     assert agg["defect_classification_correct"] == "2/2"
+    assert agg["known_defect_detection_rate"] == "1/1"
+    assert agg["false_positive_count"] == "0/1"
     assert agg["repair_success_rate"] == "1/1"
     assert agg["assertion_preservation_rate"] == "1/1"
     assert agg["total_model_calls"] == 8
@@ -324,7 +328,11 @@ def test_aggregate_partial_failure():
     ]
     agg = _aggregate(results)
     assert agg["overall_success_rate"] == "1/3"
+    assert agg["overall_outcome_match"] == "1/3"
     assert agg["defect_classification_correct"] == "1/2"
+    assert agg["api_classification_accuracy"] == "1/2"
+    assert agg["known_defect_detection_rate"] == "0/1"
+    assert agg["false_positive_count"] == "0/1"
     assert agg["repair_success_rate"] == "0/1"
     assert agg["assertion_preservation_rate"] == "0/1"
     assert len(agg["failed_or_inconclusive"]) == 2
@@ -470,3 +478,86 @@ def test_run_eval_scenario_app_error():
     assert result["status"] == "failed"
     assert result["failure_type"] == "application_error"
     assert result["expected_outcome_matched"] is True
+
+
+# ---------------------------------------------------------------------------
+# 8. Phase 6 Expansion: Pagination Boundary & Input Validation Defect Tests
+# ---------------------------------------------------------------------------
+
+def test_pagination_boundary_defect_metadata():
+    meta = SCENARIO_META.get("pagination-boundary-defect")
+    assert meta is not None, "pagination-boundary-defect must be registered"
+    assert meta["kind"] == "defect"
+    assert meta["known_bug"]
+    assert "start = page * size" in meta["source"]
+    assert "page: int = Query(1, ge=1" in meta["source"]
+
+
+def test_input_validation_defect_metadata():
+    meta = SCENARIO_META.get("input-validation-defect")
+    assert meta is not None, "input-validation-defect must be registered"
+    assert meta["kind"] == "defect"
+    assert meta["known_bug"]
+    assert "quantity: int" in meta["source"]
+    assert "quantity <= 0" in meta["description"]
+
+
+def test_evaluate_pagination_boundary_defect_success():
+    result = _fake_result(
+        "defect_detected", "assertion_failure",
+        metrics={
+            "testsCollected": 10, "testsPassed": 6,
+            "testsFailed": 4, "testsErrored": 0, "pytestExitCode": 1,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "pagination-boundary-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["pagination-boundary-defect"]
+    )
+    assert matched, reason
+
+
+def test_evaluate_pagination_boundary_defect_fails_on_clean_verdict():
+    result = _fake_result(
+        "success", None,
+        metrics={
+            "testsCollected": 10, "testsPassed": 10,
+            "testsFailed": 0, "testsErrored": 0, "pytestExitCode": 0,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "pagination-boundary-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["pagination-boundary-defect"]
+    )
+    assert not matched
+    assert "expected defect_detected" in reason
+
+def test_evaluate_input_validation_defect_success():
+    result = _fake_result(
+        "defect_detected", "assertion_failure",
+        metrics={
+            "testsCollected": 8, "testsPassed": 5,
+            "testsFailed": 3, "testsErrored": 0, "pytestExitCode": 1,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "input-validation-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["input-validation-defect"]
+    )
+    assert matched, reason
+
+
+def test_evaluate_input_validation_defect_fails_on_clean_verdict():
+    result = _fake_result(
+        "success", None,
+        metrics={
+            "testsCollected": 8, "testsPassed": 8,
+            "testsFailed": 0, "testsErrored": 0, "pytestExitCode": 0,
+        },
+    )
+    matched, reason = _evaluate_outcome(
+        "input-validation-defect", result, FakeRecordingSandbox([]), _FakeAgent(),
+        SCENARIO_META["input-validation-defect"]
+    )
+    assert not matched
+    assert "expected defect_detected" in reason
