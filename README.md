@@ -145,6 +145,33 @@ temporary copy, passes that failure through the existing repair loop, checks
 that the original assertions remain in the repaired suite, and removes the
 verification files. No production source or preset is edited.
 
+### Phase 5 API evaluation benchmark
+
+`backend.eval_phase5` provides a 5-scenario evaluation benchmark to measure agent performance across realistic FastAPI application patterns:
+1. `multi-endpoint`: Clean product catalogue CRUD API (verifies multi-route test synthesis).
+2. `inventory-defect`: Pricing API with deliberate arithmetic calculation bug (verifies executed assertion failures and `API_DEFECT` classification without false repairs).
+3. `pagination-validation`: Item search with 1-based pagination, page size bounds, category filtering, and 404s (verifies input validation and edge cases).
+4. `repair-import`: Ground-truth clean API with a temporary injected missing fixture (verifies bounded self-healing and assertion preservation).
+5. `broken-init`: Missing `BaseModel` inheritance (verifies FastAPI initialization error handling without false defect claims).
+
+Run the deterministic evaluation unit tests (no credentials, network, or Docker required):
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m pytest backend/tests/test_eval_phase5.py -q
+```
+
+To run an individual live scenario (requires Meta API credentials, network access, and running Docker; consumes quota):
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 multi-endpoint --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 inventory-defect --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 pagination-validation --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 repair-import --live
+.\backend\.venv\Scripts\python.exe -m backend.eval_phase5 broken-init --live
+```
+
+Reports are written to `backend/eval_reports/` as both JSON and Markdown summaries. An aggregate verified summary is maintained in `backend/eval_reports/PHASE5_LIVE_SUMMARY.md`.
+
 ## Hackathon demo
 
 Run the UI with the commands above and demonstrate these cases:

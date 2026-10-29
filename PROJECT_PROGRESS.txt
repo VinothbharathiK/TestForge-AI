@@ -146,7 +146,7 @@ Known limitations:
 ---
 
 NEXT PHASE: ADVANCED TESTING AND EVALUATION
-Status: Planned — not yet started.
+Status: Completed (29 October 2026).
 
 Intended work:
 
@@ -164,3 +164,43 @@ Intended work:
 
 Meta API credits will be used for meaningful experiments. Unnecessary repeated calls
 and redundant live verification runs should be avoided.
+
+---
+
+COMPLETED: PHASE 5 — ADVANCED TESTING AND EVALUATION
+Date: 29 October 2026
+
+Phase 5 implementation and live evaluation benchmark are complete and verified.
+
+What was implemented:
+- backend/eval_phase5.py: Opt-in evaluation framework reusing RecordingSandbox,
+  FixtureInjectionAgent, and agent classification from backend/release_verify.py
+  without duplicating Docker infrastructure.
+- 5 synthetic FastAPI evaluation scenarios with independent ground-truth outcomes:
+    1. multi-endpoint: Product catalogue CRUD API (clean, 23 tests collected/passed).
+    2. inventory-defect: Pricing API with arithmetic discount defect (12 collected,
+       6 passed, 6 failed, classified as API_DEFECT, 0 repairs).
+    3. pagination-validation: Item search API with pagination, bounds, filters (clean,
+       25 tests collected/passed).
+    4. repair-import: Injected missing fixture setup error; repaired in 1 attempt,
+       rerun passed 25/25 in Docker, all 67 baseline assertions preserved.
+    5. broken-init: Order API missing BaseModel; FastAPI initialization error
+       (exit 2, 0 collected, 1 error, 0 repairs).
+- backend/tests/test_eval_phase5.py: 20 deterministic in-process unit tests verifying
+  registry integrity, evaluation rules, metric aggregation, and markdown generation
+  with zero network, zero credentials, and zero Docker dependencies.
+- Dual report output: Structured JSON and human-readable Markdown written to
+  backend/eval_reports/ with aggregate summary in backend/eval_reports/PHASE5_LIVE_SUMMARY.md.
+
+Verified live evaluation results (2026-10-29):
+- Aggregate outcome-match rate: 5/5 (100%).
+- Defect-classification accuracy: 3/3 (100%) across applicable initialized test runs.
+- Repair success rate: 1/1 (100%) on eligible test-harness failures.
+- Assertion preservation: 67/67 (100%) on repaired test suite.
+- Model calls: 7 calls across 5 scenarios.
+- Cumulative wall time: ~121.8s.
+- Token usage: Not exposed by provider response object (truthfully omitted).
+
+Deterministic verification results:
+- Backend unit suite: 58 passed (pytest, Python 3.13.14).
+- Python compilation: all backend modules and tests passed.
